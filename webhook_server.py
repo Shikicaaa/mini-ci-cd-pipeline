@@ -171,7 +171,7 @@ async def receive_webhook(request: Request):
         payload_json = json.loads(payload_string)
 
         expected_signature = "sha256=" + hmac.new(
-            key=GITHUB_SECRET_HEADER,
+            key=GITHUB_SECRET_HEADER.encode(),
             msg=payload_bytes,
             digestmod=hashlib.sha256
         ).hexdigest()
