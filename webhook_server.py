@@ -247,7 +247,7 @@ async def receive_webhook(request: Request):
                 print("Git action unsucessfull")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Git action unsucessfull"
+                    detail="Git action unsucessfull!"
                 )
         else:
             print(f"'{pushed_ref}' vs '{expected_ref}' ({pushed_ref == expected_ref})")
