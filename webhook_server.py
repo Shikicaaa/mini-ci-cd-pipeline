@@ -95,7 +95,7 @@ def handle_git_update(config: RepoConfig) -> bool:
 def save_config(config: RepoConfig):
     try:
         with open(CONFIG_FILE, "w") as f:
-            json.dump(config.model_dump(), f, indent=4)
+            json.dump(config.model_dump(mode="json"), f, indent=4)
         print(f"Config saved in {CONFIG_FILE}.")
     except IOError as e:
         print(f"Error: cannot save config in {CONFIG_FILE}. Message: {e}")
@@ -105,7 +105,7 @@ def load_config() -> RepoConfig | None:
     if not os.path.exists(CONFIG_FILE):
         return None
     try:
-        with open(CONFIG_FILE, "w") as f:
+        with open(CONFIG_FILE, "r") as f:
             data = json.load(f)
             config = RepoConfig(**data)
             print(f"Configuration loaded from {CONFIG_FILE}")
