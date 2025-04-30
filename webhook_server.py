@@ -9,15 +9,38 @@ from fastapi import FastAPI, HTTPException, Request, status
 
 from models.repo_model import RepoConfig
 
+import uvicorn
+
 load_dotenv()
 
-import uvicorn
 
 webhook_app = FastAPI()
 
 CONFIG_FILE = "config.json"
 WORKSPACE_DIR = "ci_workspace"
-GITHUB_SECRET_HEADER= os.getenv("GITHUB_SECRET_HEADER")
+
+GITHUB_SECRET_HEADER = os.getenv("GITHUB_SECRET_HEADER")
+
+
+def build_deploy_docker(repo_dir: str, image_name: str) -> bool:
+    if not run_command(
+        ["docker", "build", "-t", image_name, "."],
+        working_dir=repo_dir
+    ):
+        print("Docker build failed")
+        return False
+
+    run_command(
+        ["docker", "rm", "-f", "ci-app-container"]
+    )
+
+    if not run_command(
+        ["docker", "run", "-d", "--name", "ci-app-container", "-p", "8080:80", image_name]
+    ):
+        print("Docker run failed!")
+        return False
+
+    return True
 
 
 def run_command(command: list[str], working_dir: str | None = None) -> bool:
@@ -217,9 +240,9 @@ async def receive_webhook(request: Request):
 
             if success:
                 print("Git action successfull")
-                return {
-                    "message": "Webhook processed, code updated"
-                }
+                repo_path = os.path.join(WORKSPACE_DIR, "repo")
+                if build_deploy_docker(repo_path):
+                    return {"message": "Webhook processed, app deployed!"}
             else:
                 print("Git action unsucessfull")
                 raise HTTPException(
@@ -227,10 +250,12 @@ async def receive_webhook(request: Request):
                     detail="Git action unsucessfull"
                 )
         else:
-            print("Ignorisem webhook: Ne odgovara konfigurisanom repozitorijumu ili grani.")
-            print(f"  Pushed Ref:      '{pushed_ref}' vs Expected Ref: '{expected_ref}' (Match: {pushed_ref == expected_ref})")
-            print(f"  Repo Clone URL:  '{repo_cloned_url}' vs Config Repo URL: '{config_repo_url}' (Match: {repo_cloned_url == config_repo_url})")
-            return {"status": "Ignorisano: Ne odgovara konfiguraciji"}
+            print(f"'{pushed_ref}' vs '{expected_ref}' ({pushed_ref == expected_ref})")
+            print(
+                f"'{repo_cloned_url}' vs '{config_repo_url}'",
+                f" ({repo_cloned_url == config_repo_url})"
+            )
+            return {"status": "Ignored does not match config"}
 
     except json.JSONDecodeError:
         print("Error, json cannot be parsed!")
