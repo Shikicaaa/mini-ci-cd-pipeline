@@ -171,7 +171,7 @@ async def receive_webhook(request: Request):
             )
 
         expected_ref = f"refs/heads/{config.main_branch}"
-        config_repo_url = str(payload_json["ref"])
+        config_repo_url = str(config.repo_url)
 
         if pushed_ref == expected_ref and repo_cloned_url == config_repo_url:
             print(f"Detected push on {config.main_branch} {config.repo_url}.")
