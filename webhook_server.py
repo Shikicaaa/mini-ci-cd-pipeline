@@ -83,7 +83,7 @@ def handle_git_update(config: RepoConfig) -> bool:
                 repo_path
             ]
         ):
-            print("Error: git clone failed")
+            print("Error: git clone failed.")
             return False
 
     print(
