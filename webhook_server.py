@@ -1,10 +1,15 @@
 import json
 import os
 import subprocess
+import hmac
+import hashlib
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Request, status
 
 from models.repo_model import RepoConfig
+
+load_dotenv()
 
 import uvicorn
 
@@ -12,6 +17,7 @@ webhook_app = FastAPI()
 
 CONFIG_FILE = "config.json"
 WORKSPACE_DIR = "ci_workspace"
+GITHUB_SECRET_HEADER= os.getenv("GITHUB_SECRET_HEADER")
 
 
 def run_command(command: list[str], working_dir: str | None = None) -> bool:
@@ -145,10 +151,39 @@ async def get_config():
 async def receive_webhook(request: Request):
     print("Received Webhook")
 
+    if not GITHUB_SECRET_HEADER:
+        print("Webhook secret not defined")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook secret not defined"
+        )
+    signature_header = request.headers.get("X-Hub-Signature-256")
+    if not signature_header:
+        print("No signature header")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No signature header!"
+        )
+
     try:
         payload_bytes = await request.body()
         payload_string = payload_bytes.decode("utf-8")
         payload_json = json.loads(payload_string)
+
+        expected_signature = "sha256=" + hmac.new(
+            key=GITHUB_SECRET_HEADER,
+            msg=payload_bytes,
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(expected_signature, signature_header):
+            print("Invalid signature")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid signature error!"
+            )
+        
+        print("Signature verified!")
 
         config = load_config()
 
