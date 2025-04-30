@@ -90,6 +90,7 @@ def handle_git_update(config: RepoConfig) -> bool:
         f"Code for repo {repo_url_str} on branch {config.main_branch}",
         f" is updated in {repo_path}"
     )
+    return True
 
 
 def save_config(config: RepoConfig):
