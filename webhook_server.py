@@ -205,7 +205,7 @@ async def receive_webhook(request: Request):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid signature error!"
             )
-        
+
         print("Signature verified!")
 
         config = load_config()
