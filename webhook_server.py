@@ -241,7 +241,7 @@ async def receive_webhook(request: Request):
             if success:
                 print("Git action successfull")
                 repo_path = os.path.join(WORKSPACE_DIR, "repo")
-                if build_deploy_docker(repo_path):
+                if build_deploy_docker(repo_path, image_name="ci-image"):
                     return {"message": "Webhook processed, app deployed!"}
             else:
                 print("Git action unsucessfull")
