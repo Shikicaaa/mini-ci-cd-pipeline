@@ -187,14 +187,14 @@ async def receive_webhook(request: Request):
             else:
                 print("Git action unsucessfull")
                 raise HTTPException(
-                    status_code=status.HTTP_500_BAD_REQUEST,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Git action unsucessfull"
                 )
         else:
-            print("Ignoring webhook, does not apply to configured repo")
-            return {
-                "status": "Webhook ignored, does not apply to configured repo"
-            }
+            print("Ignorisem webhook: Ne odgovara konfigurisanom repozitorijumu ili grani.")
+            print(f"  Pushed Ref:      '{pushed_ref}' vs Expected Ref: '{expected_ref}' (Match: {pushed_ref == expected_ref})")
+            print(f"  Repo Clone URL:  '{repo_cloned_url}' vs Config Repo URL: '{config_repo_url}' (Match: {repo_cloned_url == config_repo_url})")
+            return {"status": "Ignorisano: Ne odgovara konfiguraciji"}
 
     except json.JSONDecodeError:
         print("Error, json cannot be parsed!")
