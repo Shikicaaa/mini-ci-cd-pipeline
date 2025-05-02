@@ -1,9 +1,8 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from .base import Base
 from passlib.context import CryptContext
-
-Base = declarative_base()
+from .repo_model import repo_user
 
 pwd_context = CryptContext(schemes=["bcrypt"])
 
@@ -24,6 +23,7 @@ class User(Base):
     password_hash: str = Column(String)
 
     tests = relationship("Test", back_populates="owner")
+    configs = relationship("RepoConfig", secondary=repo_user, back_populates="users")
 
 
 class Test(Base):

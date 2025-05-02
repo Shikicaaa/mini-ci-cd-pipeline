@@ -15,14 +15,39 @@ def get_db():
         db.close()
 
 
-def get_current_user(authorization: str = Header(...)):
+def get_current_user(
+        authorization: str = Header(...),
+        db: Session = Depends(get_db)
+) -> User | None:
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid auth scheme")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not valid bearer token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
     payload = decode_token(token)
     if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return payload["sub"]
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+            detail="Invalid or expired token"
+        )
+    username = payload.get("sub")
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token does not contain sub",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found in database",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
