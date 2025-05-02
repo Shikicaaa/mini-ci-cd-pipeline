@@ -19,5 +19,5 @@ RUN flake8 . || exit 1
 
 RUN pytest tests/ || exit 1
 
-#test
+
 CMD ["python", "main.py"]
