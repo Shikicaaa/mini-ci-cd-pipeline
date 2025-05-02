@@ -3,6 +3,7 @@ import os
 import subprocess
 import hmac
 import hashlib
+from datetime import datetime
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Request, status, Depends
@@ -33,27 +34,45 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> bool:
     try:
-        print("Building Docker image...")
-        if not run_command(
-            ["docker", "build", "-t", image_name, "."],
-            working_dir=repo_dir
-        ):
-            raise RuntimeError("Docker build failed")
+        build_date = datetime.utcnow().isoformat()
+        commit_sha = subprocess.getoutput("git rev-parse --short HEAD")
+
+        print("Building Multiplatform Docker image...")
+        if not run_command([
+            "docker", "buildx", "build",
+            "--platform", "linux/amd64,linux/arm64",
+            "-t", image_name,
+            "--build-arg", f"BUILD_DATE={build_date}",
+            "--build-arg", f"COMMIT_SHA={commit_sha}",
+            "--label", f"org.opencontainers.image.created={build_date}",
+            "--label", f"org.opencontainers.image.revision={commit_sha}",
+            ".", "--push"
+        ], working_dir=repo_dir):
+            raise RuntimeError("Docker multi-platform build failed")
+
+        print("Building Local Docker image...")
+        if not run_command([
+            "docker", "buildx", "build",
+            "--platform", "linux/amd64",
+            "-t", f"{image_name}-test",
+            ".", "--load"
+        ], working_dir=repo_dir):
+            raise RuntimeError("Local test image build failed")
 
         print("Running tests inside temporary container...")
         test_command = ["pytest"]
-        run_test_cmd = ["docker", "run", "--rm", image_name] + test_command
-
-        if not run_command(run_test_cmd):
+        if not run_command(
+            ["docker", "run", "--rm", f"{image_name}-test"] + test_command
+        ):
             raise RuntimeError("Tests failed inside container")
 
         print("Cleaning up old container...")
-        run_command(["docker", "rm", "-f", f"{container_name}"])
+        run_command(["docker", "rm", "-f", f"{container_name}-test"])
 
         print("Running new container in background...")
         if not run_command([
-            "docker", "run", "-d", "--name", f"{container_name}",
-            "-p", "8080:80", image_name
+            "docker", "run", "-d", "--name", container_name,
+            "-p", "8080:80", f"{image_name}-test"
         ]):
             raise RuntimeError("Docker run failed")
 
