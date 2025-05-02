@@ -5,9 +5,12 @@ import hmac
 import hashlib
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, Depends
+from fastapi.security import OAuth2PasswordBearer
 
 from models.repo_model import RepoConfig
+from api.api_users import router as user_router
+from api.api_users import get_current_user
 
 import uvicorn
 
@@ -16,10 +19,14 @@ load_dotenv()
 
 webhook_app = FastAPI()
 
-CONFIG_FILE = "config.json"
+webhook_app.include_router(user_router, prefix="/auth", tags=["Auth"])
+
+CONFIG_FILE = "config"
 WORKSPACE_DIR = "ci_workspace"
 
 GITHUB_SECRET_HEADER = os.getenv("GITHUB_SECRET_HEADER")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def build_deploy_docker(repo_dir: str, image_name: str) -> bool:
@@ -122,36 +129,41 @@ def handle_git_update(config: RepoConfig) -> bool:
     return True
 
 
-def save_config(config: RepoConfig):
+def save_config(config: RepoConfig, user: str):
     try:
-        with open(CONFIG_FILE, "w") as f:
+        output = CONFIG_FILE + f"_{user}.json"
+        with open(output, "w") as f:
             json.dump(config.model_dump(mode="json"), f, indent=4)
-        print(f"Config saved in {CONFIG_FILE}.")
+        print(f"Config saved in {output}.")
     except IOError as e:
-        print(f"Error: cannot save config in {CONFIG_FILE}. Message: {e}")
+        print(f"Error: cannot save config in {output}. Message: {e}")
 
 
-def load_config() -> RepoConfig | None:
-    if not os.path.exists(CONFIG_FILE):
+def load_config(user: str) -> RepoConfig | None:
+    output = CONFIG_FILE + f"_{user}.json"
+    if not os.path.exists(output):
         return None
     try:
-        with open(CONFIG_FILE, "r") as f:
+        with open(output, "r") as f:
             data = json.load(f)
             config = RepoConfig(**data)
-            print(f"Configuration loaded from {CONFIG_FILE}")
+            print(f"Configuration loaded from {output}")
             return config
     except (IOError, json.JSONDecodeError, TypeError, ValueError) as e:
-        print(f"Error: cannot load config from {CONFIG_FILE}. Message: {e}")
+        print(f"Error: cannot load config from {output}. Message: {e}")
         return None
 
 
 @webhook_app.post("/config")
-async def config_repo(config_data: RepoConfig):
+async def config_repo(
+    config_data: RepoConfig,
+    user: str = Depends(get_current_user)
+):
     print(
         f"Repo url: {config_data.repo_url}",
         f"Main branch: {config_data.main_branch}"
     )
-    save_config(config_data)
+    save_config(config_data, user)
     return {
         "message": "Config saved successfuly!",
         "config": config_data
@@ -159,8 +171,10 @@ async def config_repo(config_data: RepoConfig):
 
 
 @webhook_app.get("/config")
-async def get_config():
-    config = load_config()
+async def get_config(
+    user: str = Depends(get_current_user)
+):
+    config = load_config(user)
     if config:
         return config
     else:

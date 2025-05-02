@@ -175,4 +175,4 @@ cython_debug/
 
 asd.py
 ci_workspace/
-config.json
+config*.json
