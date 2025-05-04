@@ -454,7 +454,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                     PipelineStatusEnum.FAILED_GIT,
                     status_log
                 )
-                save_logs_to_file(pipeline_run.id, pipeline_run.logs)
+                save_logs_to_file(pipeline_run.id, status_log)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Git action unsucessfull!"
@@ -495,7 +495,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                     final_status,
                     status_log
                 )
-                save_logs_to_file(pipeline_run.id, pipeline_run.logs)
+                save_logs_to_file(pipeline_run.id, status_log)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Docker build/deploy was unsuccessfull!"
@@ -512,7 +512,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 pipeline_id,
                 PipelineStatusEnum.SUCCESS
             )
-            save_logs_to_file(pipeline_run.id, pipeline_run.logs)
+            save_logs_to_file(pipeline_run.id, status_log)
             return {
                 "message": f"PipelineRun ID={pipeline_id} finished successfully." +
                 f"App deployed as {container_name}."
@@ -524,7 +524,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 f"'{repo_cloned_url}' vs '{config_repo_url}'",
                 f" ({repo_cloned_url == config_repo_url})"
             )
-            save_logs_to_file(pipeline_run.id, pipeline_run.logs)
+            save_logs_to_file(pipeline_run.id, status_log)
             return {"status": "Ignored does not match config"}
 
     except json.JSONDecodeError:
