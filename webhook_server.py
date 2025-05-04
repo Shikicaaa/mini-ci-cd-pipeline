@@ -164,7 +164,7 @@ def update_pipeline_status(
                 PipelineStatusEnum.FAILED_GIT,
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
                 PipelineStatusEnum.FAILED_DOCKER_DEPLOY,
-                PipelineStatusEnum.FAILED_UNKNOWN
+                PipelineStatusEnum.UNKNOWN
             ]
             if is_final_status and not pipeline_run.end_time:
                 pipeline_run.end_time = datetime.datetime.now(datetime.timezone.utc)
