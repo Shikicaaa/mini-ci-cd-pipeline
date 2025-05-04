@@ -37,7 +37,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def run_command(command: list[str], working_dir: str | None = None) -> bool:
     command_output = ""
-    command_output += f"Running command {' '.join(command)}",
+    command_output += f"Running command {' '.join(command)}"
     command_output += f" in directory: {working_dir if working_dir else ''}\n"
     success = True
 
