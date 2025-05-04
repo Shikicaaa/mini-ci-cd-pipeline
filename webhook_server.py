@@ -428,7 +428,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 config_id=config.id,
                 status=PipelineStatusEnum.PENDING,
                 commit_sha=commit_sha,
-                trigger_event=github_delivery_id,
+                trigger_event_id=github_delivery_id,
                 logs=status_log.strip()
             )
             db.add(pipeline_run)
