@@ -434,9 +434,8 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             db.add(pipeline_run)
             db.commit()
             db.refresh(pipeline_run)
-
+            pipeline_id = pipeline_run.id
             git_success = handle_git_update(config)
-
             if not git_success:
                 print("Git action unsucessfull")
                 update_pipeline_status(
