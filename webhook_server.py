@@ -38,7 +38,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 def save_logs_to_file(run_id: int, logs: str):
     try:
         filename = f"pipeline_logs_{run_id}.txt"
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="UTF-8") as f:
             f.write(logs.strip())
         print(f"Logs for PipelineRun ID={run_id} saved to {filename}")
     except Exception as e:
