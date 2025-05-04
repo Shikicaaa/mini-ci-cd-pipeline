@@ -3,7 +3,7 @@ import os
 import subprocess
 import hmac
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import traceback
 
@@ -167,11 +167,11 @@ def update_pipeline_status(
                 PipelineStatusEnum.UNKNOWN
             ]
             if is_final_status and not pipeline_run.end_time:
-                pipeline_run.end_time = datetime.datetime.now(datetime.timezone.utc)
+                pipeline_run.end_time = datetime.now(datetime.timezone.utc)
 
             if logs_to_append:
-                timestamp = datetime.datetime.now(
-                    datetime.timezone.utc
+                timestamp = datetime.now(
+                    tz=timezone.utc
                 ).strftime('%Y-%m-%d %H:%M:%S UTC')
                 new_log_entry = (
                     f"\n--- {timestamp} ---\n{logs_to_append.strip()}\n"
