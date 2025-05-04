@@ -35,6 +35,16 @@ GITHUB_SECRET_HEADER = os.getenv("GITHUB_SECRET_HEADER")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
+def save_logs_to_file(run_id: int, logs: str):
+    try:
+        filename = f"pipeline_logs_{run_id}.txt"
+        with open(filename, "w") as f:
+            f.write(logs.strip())
+        print(f"Logs for PipelineRun ID={run_id} saved to {filename}")
+    except Exception as e:
+        print(f"Failed to save logs for run {run_id}: {e}")
+
+
 def run_command(command: list[str], working_dir: str | None = None) -> bool:
     command_output = ""
     command_output += f"Running command {' '.join(command)}"
@@ -444,6 +454,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                     PipelineStatusEnum.FAILED_GIT,
                     status_log
                 )
+                save_logs_to_file(pipeline_run.id, pipeline_run.logs)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Git action unsucessfull!"
@@ -484,6 +495,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                     final_status,
                     status_log
                 )
+                save_logs_to_file(pipeline_run.id, pipeline_run.logs)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Docker build/deploy was unsuccessfull!"
@@ -500,6 +512,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 pipeline_id,
                 PipelineStatusEnum.SUCCESS
             )
+            save_logs_to_file(pipeline_run.id, pipeline_run.logs)
             return {
                 "message": f"PipelineRun ID={pipeline_id} finished successfully." +
                 f"App deployed as {container_name}."
@@ -511,6 +524,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 f"'{repo_cloned_url}' vs '{config_repo_url}'",
                 f" ({repo_cloned_url == config_repo_url})"
             )
+            save_logs_to_file(pipeline_run.id, pipeline_run.logs)
             return {"status": "Ignored does not match config"}
 
     except json.JSONDecodeError:
