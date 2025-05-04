@@ -167,7 +167,7 @@ def update_pipeline_status(
                 PipelineStatusEnum.UNKNOWN
             ]
             if is_final_status and not pipeline_run.end_time:
-                pipeline_run.end_time = datetime.now(datetime.timezone.utc)
+                pipeline_run.end_time = datetime.now(tz=timezone.utc)
 
             if logs_to_append:
                 timestamp = datetime.now(
