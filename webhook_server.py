@@ -112,7 +112,7 @@ def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> 
     success, build_log = run_command([
         "docker", "buildx", "build",
         "--platform", "linux/amd64,linux/arm64",
-        "-t", image_name,
+        "-t", "shikicaaa/image_name",
         "--build-arg", f"BUILD_DATE={build_date}",
         "--build-arg", f"COMMIT_SHA={commit_sha}",
         "--label", f"org.opencontainers.image.created={build_date}",
