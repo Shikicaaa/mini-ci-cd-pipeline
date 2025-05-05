@@ -95,7 +95,10 @@ def run_command(command: list[str], working_dir: str | None = None) -> bool:
     return success, command_output.strip()
 
 
-def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> bool:
+def build_deploy_docker(
+        repo_dir: str,
+        image_name: str,
+        container_name: str) -> tuple[bool, str]:
     all_logs = ""
     build_date = datetime.utcnow().isoformat()
     try:
@@ -112,7 +115,7 @@ def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> 
     success, build_log = run_command([
         "docker", "buildx", "build",
         "--platform", "linux/amd64,linux/arm64",
-        "-t", "shikicaaa/image_name",
+        "-t", f"shikicaaa/{image_name}",
         "--build-arg", f"BUILD_DATE={build_date}",
         "--build-arg", f"COMMIT_SHA={commit_sha}",
         "--label", f"org.opencontainers.image.created={build_date}",
@@ -135,7 +138,7 @@ def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> 
     # ], working_dir=repo_dir):
     #     raise RuntimeError("Local test image build failed")
 
-    print("Stopping and removing existin container")
+    print("Stopping and removing existing container")
     _, rm_log = run_command([
         "docker", "rm", "-f", container_name
     ])
@@ -147,7 +150,7 @@ def build_deploy_docker(repo_dir: str, image_name: str, container_name: str) -> 
         "docker", "run", "-d",
         "--name", container_name,
         "-p", "8080:80",
-        image_name
+        f"shikicaaa/{image_name}"
     ])
     all_logs += "\n--- Run container log---\n" + run_log + "\n"
     if not run_success:
