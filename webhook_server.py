@@ -97,7 +97,8 @@ def run_command(command: list[str], working_dir: str | None = None) -> bool:
 def build_deploy_docker(
         repo_dir: str,
         image_name: str,
-        container_name: str) -> tuple[bool, str]:
+        container_name: str,
+        username: str) -> tuple[bool, str]:
     all_logs = ""
     build_date = datetime.utcnow().isoformat()
     try:
@@ -114,7 +115,7 @@ def build_deploy_docker(
     success, build_log = run_command([
         "docker", "buildx", "build",
         "--platform", "linux/amd64,linux/arm64",
-        "-t", f"shikicaaa/{image_name}",
+        "-t", f"{username}/{image_name}",
         "--build-arg", f"BUILD_DATE={build_date}",
         "--build-arg", f"COMMIT_SHA={commit_sha}",
         "--label", f"org.opencontainers.image.created={build_date}",
@@ -137,9 +138,12 @@ def build_deploy_docker(
     # ], working_dir=repo_dir):
     #     raise RuntimeError("Local test image build failed")
 
+    old_container_parts = container_name.split("-")
+    old_id = int(old_container_parts[-1])-1
+    old_container_name = "".join(old_container_parts[:-1] + [str(old_id)])
     print("Stopping and removing existing container")
     _, rm_log = run_command([
-        "docker", "rm", "-f", container_name
+        "docker", "rm", "-f", old_container_name
     ])
     all_logs += "\n--- Removing Container Logs ---\n"
     all_logs += rm_log + "\n"
@@ -149,7 +153,7 @@ def build_deploy_docker(
         "docker", "run", "-d",
         "--name", container_name,
         "-p", "8080:80",
-        f"shikicaaa/{image_name}"
+        f"{username}/{image_name}"
     ])
     all_logs += "\n--- Run container log---\n" + run_log + "\n"
     if not run_success:
@@ -512,7 +516,8 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             deploy_success, deploy_logs = build_deploy_docker(
                 repo_dir=repo_path,
                 image_name=image_name,
-                container_name=container_name
+                container_name=container_name,
+                username=config.docker_username
             )
             status_log += deploy_logs
             if not deploy_success:
