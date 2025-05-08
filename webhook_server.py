@@ -140,7 +140,7 @@ def build_deploy_docker(
 
     old_container_parts = container_name.split("-")
     old_id = int(old_container_parts[-1])-1
-    old_container_name = "".join(old_container_parts[:-1] + [str(old_id)])
+    old_container_name = "-".join(old_container_parts[:-1] + [str(old_id)])
     print("Stopping and removing existing container")
     _, rm_log = run_command([
         "docker", "rm", "-f", old_container_name
