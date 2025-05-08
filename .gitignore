@@ -176,3 +176,4 @@ cython_debug/
 asd.py
 ci_workspace/
 config*.json
+pipeline_logs*

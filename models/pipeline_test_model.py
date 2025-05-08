@@ -3,19 +3,7 @@ from sqlalchemy import (Column, Integer, String, DateTime,
                         Text, ForeignKey, Enum as SQLAEnum)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import enum
-
-
-class PipelineStatusEnum(enum.Enum):
-    PENDING = "PENDING"
-    RUNNING_GIT = "RUNNING_GIT"
-    RUNNING_DOCKER_BUILD = "RUNNING_DOCKER_BUILD"
-    RUNNING_DOCKER_DEPLOY = "RUNNING_DOCKER_DEPLOY"
-    SUCCESS = "SUCCESS"
-    FAILED_GIT = "FAILED_GIT"
-    FAILED_DOCKER_BUILD = "FAILED_DOCKER_BUILD"
-    FAILED_DOCKER_DEPLOY = "FAILED_DOCKER_DEPLOY"
-    UNKNOWN = "UNKNOWN"
+from schemas.schema_pipeline import PipelineStatusEnum
 
 
 class PipelineRuns(Base):
@@ -23,7 +11,7 @@ class PipelineRuns(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     config_id = Column(Integer, ForeignKey("configs.id"), nullable=False)
-    config = relationship("RepoConfig")
+    config = relationship("RepoConfig", back_populates="pipeline_runs")
 
     trigger_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)

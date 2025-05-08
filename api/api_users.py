@@ -1,8 +1,21 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from db import SessionLocal
 from models.user_model import User, hash_password, verify_password
 from auth.jwt_handler import create_token, decode_token
+from pydantic import BaseModel, EmailStr
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
 
 router = APIRouter()
 
@@ -17,7 +30,7 @@ def get_db():
 
 def get_current_user(
         authorization: str = Header(...),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ) -> User | None:
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
@@ -52,21 +65,22 @@ def get_current_user(
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(
-    username: str = Body(...),
-    email: str = Body(...),
-    password: str = Body(...),
+    user_data: RegisterRequest,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.username == username or User.email == email).first()
+    user = db.query(User).filter(
+        User.username == user_data.username or
+        User.email == user_data.email
+    ).first()
     if user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with that email or username already exists!"
         )
     new_user = User(
-        username=username,
-        email=email,
-        password_hash=hash_password(password),
+        username=user_data.username,
+        email=user_data.email,
+        password_hash=hash_password(user_data.password),
     )
     db.add(new_user)
     db.commit()
@@ -78,17 +92,16 @@ def register(
 
 @router.post("/login", status_code=status.HTTP_200_OK)
 def login(
-    email: str = Body(...),
-    password: str = Body(...),
+    form_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(User.email == form_data.email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User with email: '{email}' doesn't exist"
+            detail=f"User with email: '{form_data.email}' doesn't exist"
         )
-    elif not verify_password(password, user.password_hash):
+    elif not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password is incorrect!"
