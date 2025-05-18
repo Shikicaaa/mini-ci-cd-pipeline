@@ -1,6 +1,5 @@
-from pydantic import HttpUrl
-from sqlalchemy import Column, Integer, String, ForeignKey, Table
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, Boolean
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .base import Base
 
 repo_user = Table(
@@ -21,10 +20,18 @@ repo_pipeline = Table(
 
 class RepoConfig(Base):
     __tablename__ = "configs"
-    id: int = Column(Integer, primary_key=True, index=True)
-    repo_url: HttpUrl = Column(String)
-    main_branch: str = Column(String)
-    docker_username: str = Column(String)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    repo_url: Mapped[str] = mapped_column(String)
+    main_branch: Mapped[str] = mapped_column(String)
+    docker_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    SSH_host: Mapped[str] = mapped_column(String, nullable=True)
+    SSH_port: Mapped[int] = mapped_column(Integer, nullable=True)
+    SSH_username: Mapped[str] = mapped_column(String, nullable=True)
+    SSH_key_path: Mapped[str] = mapped_column(String, nullable=True)
+    SSH_key_passphrase: Mapped[str] = mapped_column(String, nullable=True)
+    SSH_for_deploy: Mapped[bool] = mapped_column(Boolean)
+
+    webhooks = relationship("Webhook", back_populates="repo_config")
 
     users = relationship(
         "User",
@@ -35,3 +42,19 @@ class RepoConfig(Base):
         "PipelineRuns",
         back_populates="config"
     )
+
+
+class Webhook(Base):
+    __tablename__ = "webhooks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    repo_id: Mapped[int] = mapped_column(ForeignKey("configs.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    webhook_url: Mapped[str] = mapped_column(nullable=False)
+    encoded_webhook_secret: Mapped[str] = mapped_column(nullable=False)
+
+    repo_config: Mapped[RepoConfig] = relationship(
+        "RepoConfig", back_populates="webhooks"
+    )
+
+    user = relationship("User", back_populates="webhooks")

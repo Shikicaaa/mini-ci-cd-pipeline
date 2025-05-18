@@ -3,7 +3,7 @@ import LoginForm from './components/loginform';
 import RegisterForm from './components/RegisterForm';
 import HomePage from './components/HomePage';
 import { AuthProvider } from './auth/AuthContext';
-import { Dashboard } from './components/Dashboard';
+import Dashboard from './pages/Dashboard';
 
 
 const App = () => {

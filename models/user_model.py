@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .base import Base
 from passlib.context import CryptContext
 from .repo_model import repo_user
@@ -17,20 +17,21 @@ def verify_password(unhashed_pass, hashed_pass) -> bool:
 
 class User(Base):
     __tablename__ = "users"
-    id: int = Column(Integer, primary_key=True, index=True)
-    username: str = Column(String, unique=True, index=True)
-    email: str = Column(String, unique=True, index=True)
-    password_hash: str = Column(String)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String)
 
     tests = relationship("Test", back_populates="owner")
     configs = relationship("RepoConfig", secondary=repo_user, back_populates="users")
+    webhooks = relationship("Webhook", back_populates="user")
 
 
 class Test(Base):
     __tablename__ = "tests"
-    id: int = Column(Integer, primary_key=True, index=True)
-    name: str = Column(String)
-    result: str = Column(String)
-    user_id: int = Column(Integer, ForeignKey("users.id"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String)
+    result: Mapped[str] = mapped_column(String)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="tests")

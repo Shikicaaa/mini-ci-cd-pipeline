@@ -193,3 +193,5 @@ bower_components
 psd
 thumb
 sketch
+
+alembic/versions/__pycache__/

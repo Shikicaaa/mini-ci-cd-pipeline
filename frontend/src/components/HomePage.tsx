@@ -4,10 +4,10 @@ import Navbar from './Navbar';
 
 const HomePage = () => {
     return (
-        <div className="flex flex-col w-full h-screen text-[#F5F5F5]">
+        <div className="flex flex-col min-h-screen bg-gray-900 text-gray-100">
             <Navbar />
             <div className="flex-grow flex items-center justify-center">
-                <h1 className="text-[#1E3A8A] text-4xl font-bold text-center">Welcome to my mini CI-CD pipeline project</h1>
+                <h1 className="text-gray-300 text-4xl font-bold text-center">Welcome to my mini CI-CD pipeline project</h1>
             </div>
         </div>
     );

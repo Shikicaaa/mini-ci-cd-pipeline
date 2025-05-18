@@ -4,15 +4,18 @@ import { parseJwt } from '../utils/jwt';
 interface AuthContextType {
     username: string | null;
     logout: () => void;
+    setUsername: (username: string | null) => void;
 }
 
-const AuthContext = createContext<AuthContextType>({ username: null, logout: () => {} });
+
+
+const AuthContext = createContext<AuthContextType>({ username: null, logout: () => {}, setUsername: () => {} });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [username, setUsername] = useState<string | null>(null);
-
+    
     useEffect(() => {
         const getTokenFromCookies = () => {
             const match = document.cookie.match(/(?:^|; )token=([^;]*)/);
@@ -49,8 +52,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ username, logout }}>
+        <AuthContext.Provider value={{ username, logout, setUsername }}>
             {children}
         </AuthContext.Provider>
     );
 };
+

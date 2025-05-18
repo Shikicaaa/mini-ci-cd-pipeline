@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../auth/authservice';
 import type { LoginRequest } from '../types/types';
+import { parseJwt } from '../utils/jwt';
+import { useAuth } from '../auth/AuthContext';
 
 const LoginForm = () => {
     const [form, setForm] = useState<LoginRequest>({
@@ -9,6 +11,7 @@ const LoginForm = () => {
         password: '',
     });
     const [error, setError] = useState<string | null>(null);
+    const { setUsername } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -27,7 +30,12 @@ const LoginForm = () => {
         try {
             const data = await loginUser(form);
             document.cookie = `token=${data.access_token}; path=/; SameSite=Lax; Secure`;
-            navigate('/');
+            if (data.access_token){
+                const username = parseJwt(data.access_token).sub;
+                setUsername(username);
+            }
+            
+            window.location.replace('/');
         } catch (err: any) {
             setError(err.response.data.detail.toString());
         }
@@ -86,6 +94,15 @@ const LoginForm = () => {
                                 className="w-full px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring focus:ring-blue-300"
                         >
                                 Login
+                        </button>
+                        <button
+                                type="button"
+                                className="w-full px-4 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring focus:ring-blue-300"
+                                onClick={() => {
+                                        navigate("/register");
+                                      }}
+                        >
+                                Register
                         </button>
                 </form>
         </div>

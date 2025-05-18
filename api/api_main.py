@@ -1,233 +1,116 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from typing import List
-import json
 import os
+import string
+import random
+from cryptography.fernet import Fernet
 from api.api_users import get_db, get_current_user
 from models.user_model import User
-from models.pipeline_test_model import PipelineRuns
-from models.repo_model import RepoConfig
-from schemas.schema_pipeline import PipelineRunOut
-from schemas.schema_repo import RepoConfigSchema
+from models.repo_model import RepoConfig, Webhook
+from schemas.schema_webhook import WebhookSchema
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"])
 
 router = APIRouter()
 
-CONFIG_FILE = "config"
+
+FERNET_SECRET_KEY = os.getenv("FERNET_SECRET_KEY")
+if not FERNET_SECRET_KEY:
+    raise RuntimeError("FERNET_SECRET_KEY is missing in .env")
+
+fernet = Fernet(FERNET_SECRET_KEY.encode())
 
 
-def save_config(config: RepoConfig, user: str):
-    try:
-        output = CONFIG_FILE + f"_{user}.json"
-        with open(output, "w") as f:
-            json.dump(config.model_dump(mode="json"), f, indent=4)
-        print(f"Config saved in {output}.")
-    except IOError as e:
-        print(f"Error: cannot save config in {output}. Message: {e}")
-
-
-def load_config(user: str) -> RepoConfig | None:
-    output = CONFIG_FILE + f"_{user}.json"
-    if not os.path.exists(output):
-        return None
-    try:
-        with open(output, "r") as f:
-            data = json.load(f)
-            config = RepoConfig(**data)
-            print(f"Configuration loaded from {output}")
-            return config
-    except (IOError, json.JSONDecodeError, TypeError, ValueError) as e:
-        print(f"Error: cannot load config from {output}. Message: {e}")
-        return None
-
-
-@router.delete("/api/config/{config_id}")
-async def delete_config(
-    config_id: int,
+@router.delete("/api/webhook/{webhook_id}")
+async def delete_webhook(
+    webhook_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not identify user."
+            detail="Unauthorized"
         )
-
-    config = db.query(RepoConfig).filter(
-        RepoConfig.id == config_id,
-        RepoConfig.users.any(id=user.id)
-    ).first()
-
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Config not found or you don't have access."
-        )
-
-    try:
-        db.delete(config)
-        db.commit()
-        return {
-            "message": "Config deleted successfully!",
-            "config_id": config_id
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: An unexpected error has occurred: '{e}'"
-        )
-    finally:
-        db.close()
-
-
-@router.post("/api/config")
-async def config_repo(
-    config_data: RepoConfigSchema,
-    user: User = Depends(get_current_user),
-    db=Depends(get_db)
-):
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not identify user."
-        )
-
-    repo_url = str(config_data.repo_url)
-    print(
-        f"Repo url: {repo_url}",
-        f"Main branch: {config_data.main_branch}"
-    )
-
-    existing_config = db.query(RepoConfig).filter(
-        RepoConfig.repo_url == repo_url,
-        RepoConfig.main_branch == config_data.main_branch
-    ).first()
-
-    if existing_config:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identical configuration exists for this user!"
-        )
-
-    try:
-        config = RepoConfig(
-            repo_url=repo_url,
-            main_branch=config_data.main_branch
-        )
-        if user not in config.users:
-            config.users.append(user)
-        db.add(config)
-        db.commit()
-        db.refresh(config)
-        return {
-            "message": "Config saved successfuly!",
-            "config": config_data,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: An unexpected error has occured: '{e}'"
-        )
-    finally:
-        db.close()
-
-
-@router.post("/api/docker")
-async def set_docker(
-    specific_repo: str = Body(description="Can be empty, if so will fill every repo"),
-    docker_username: str = Body(description="Put your docker username here"),
-    user: User = Depends(get_current_user),
-    db=Depends(get_db)
-):
-    updated = 0
-    if not specific_repo:
-        configs = db.query(RepoConfig).filter(RepoConfig.users.any(id=user.id)).all()
-        for config in configs:
-            config.docker_username = docker_username
-            updated += 1
-    else:
-        config = db.query(RepoConfig).filter(
-            RepoConfig.users.any(id=user.id),
-            RepoConfig.repo_url == specific_repo
-        ).first()
-        if config:
-            updated += 1
-            config.docker_username = docker_username
-        else:
-            return {"message": "No matching repo found or you don't have access."}
-
+    webhook = db.query(Webhook).filter(Webhook.id == webhook_id).first()
+    db.delete(webhook)
     db.commit()
 
+
+@router.get("/api/webhook/generate")
+async def generate_webhook(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized"
+        )
+    webhook = db.query(Webhook).filter(Webhook.repo_id == repo_id).first()
+
+    if webhook:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook already exists for this configuration!"
+        )
+    
+    secret = ''.join(random.choices(string.ascii_letters + string.digits, k=256))
     return {
-        "message": f"Docker username set for {updated} config(s)"
+        "url": "test",
+        "secret": secret
     }
 
 
-@router.get("/api/config")
-async def get_config(
-    user: User = Depends(get_current_user),
-    db=Depends(get_db)
-):
-    try:
-        configs = db.query(RepoConfig).filter(RepoConfig.users.any(id=user.id)).all()
-        if not configs:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User does not have a config file saved yet!"
-            )
-        else:
-            return configs
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: An unexpected error has occured '{e}'"
-        )
-    finally:
-        db.close()
-
-
-@router.get("/api/pipelines", response_model=List[PipelineRunOut])
-async def get_pipeline(
+@router.post("/api/webhook/confirm")
+async def confirm_webhook(
+    payload: WebhookSchema,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    runs = (
-        db.query(PipelineRuns)
-        .join(PipelineRuns.config)
-        .join(RepoConfig.users)
-        .filter(User.id == user.id)
-        .options(joinedload(PipelineRuns.config))
-        .all()
+    url = payload.url
+    secret = payload.secret
+    repo_id = payload.repo_id
+    print("PROSAO")
+
+    hashed_secret = pwd_context.hash(secret)
+
+    repo = (
+        db.query(RepoConfig)
+        .filter(RepoConfig.id == repo_id)
+        .first()
     )
-    return runs
-
-
-@router.get("/api/pipelines/{pipeline_id}")
-async def get_pipelines(
-    pipeline_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    pipeline = db.query(PipelineRuns).filter_by(id=pipeline_id).first()
-    if not pipeline:
+    if not repo:
         raise HTTPException(
             status_code=404,
-            detail="Pipeline not found"
+            detail="Repository not found"
         )
-    config = pipeline.config
-    owners = config.users
+    encrypted_secret = fernet.encrypt(secret.encode()).decode()
 
-    if user not in owners:
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to access this pipeline"
-        )
+    webhook = Webhook(
+        repo_id=repo.id,
+        user_id=user.id,
+        webhook_url=url,
+        encoded_webhook_secret=encrypted_secret
+    )
+    db.add(webhook)
+    db.commit()
+    
 
-    return {
-        "pipeline_id": pipeline.id,
-        "status": pipeline.status.name,
-        "owners": [owner.username for owner in owners],
-        "repo_url": config.repo_url,
-        "trigger_time": pipeline.trigger_time,
-        "end_time": pipeline.end_time,
-        "commit_sha": pipeline.commit_sha
-    }
+
+@router.get("/api/webhooks")
+async def get_webhooks(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    webhooks = (
+        db.query(Webhook)
+        .join(RepoConfig.users)
+        .filter(User.id == user.id)
+        .options(joinedload(Webhook.repo_config))
+        .all()
+    )
+
+    return webhooks

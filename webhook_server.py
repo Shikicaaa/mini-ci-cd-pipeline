@@ -1,4 +1,5 @@
 import json
+import asyncio
 import os
 import subprocess
 import hmac
@@ -6,6 +7,7 @@ import hashlib
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import traceback
+from cryptography.fernet import Fernet
 
 from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,8 +15,12 @@ from sqlalchemy.orm import Session
 
 from api.api_users import router as user_router
 from api.api_main import router as main_router
+from api.api_config import router as config_router
+from api.api_pipeline import router as pipeline_router
+from api.api_docker import router as docker_router
+
 from api.api_users import get_db
-from models.repo_model import RepoConfig
+from models.repo_model import RepoConfig, Webhook
 from models.pipeline_test_model import PipelineRuns, PipelineStatusEnum
 
 import uvicorn
@@ -26,6 +32,9 @@ webhook_app = FastAPI(version="0.3.0")
 
 webhook_app.include_router(user_router, prefix="/auth", tags=["Auth"])
 webhook_app.include_router(main_router, tags=["Main"])
+webhook_app.include_router(docker_router, tags=["Docker"])
+webhook_app.include_router(pipeline_router, tags=["Pipeline"])
+webhook_app.include_router(config_router, tags=["RepoConfig", "Config"])
 
 webhook_app.add_middleware(
     CORSMiddleware,
@@ -38,6 +47,31 @@ webhook_app.add_middleware(
 WORKSPACE_DIR = "ci_workspace"
 
 GITHUB_SECRET_HEADER = os.getenv("GITHUB_SECRET_HEADER")
+FERNET_SECRET_KEY = os.getenv("FERNET_SECRET_KEY")
+if not FERNET_SECRET_KEY:
+    raise RuntimeError("FERNET_SECRET_KEY is missing in .env")
+
+fernet = Fernet(FERNET_SECRET_KEY.encode())
+
+
+
+def verify_signature(encrypted_secret: str, payload: bytes, signature_header: str) -> bool:
+    if not signature_header.startswith("sha256="):
+        return False
+    received_sig = signature_header.split("=")[1]
+
+    try:
+        secret = fernet.decrypt(encrypted_secret.encode()).decode()
+    except Exception:
+        return False
+
+    expected_sig = hmac.new(
+        key=secret.encode(),
+        msg=payload,
+        digestmod=hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(received_sig, expected_sig)
 
 
 def save_logs_to_file(run_id: int, logs: str):
@@ -221,7 +255,7 @@ def update_pipeline_status(
 
 
 def handle_git_update(config: RepoConfig) -> bool:
-    repo_path = os.path.join(WORKSPACE_DIR, "repo")
+    repo_path = os.path.join(WORKSPACE_DIR, f"{config.id}")
     if not os.path.exists(WORKSPACE_DIR):
         try:
             os.makedirs(WORKSPACE_DIR)
@@ -294,15 +328,44 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             msg=payload_bytes,
             digestmod=hashlib.sha256
         ).hexdigest()
+        pushed_ref = payload_json.get("ref")
+        commit_sha = payload_json.get("after")
+        github_delivery_id = request.headers.get("X-GitHub-Delivery")
+        repo_cloned_url = payload_json.get("repository", {}).get("clone_url")
+        pushed_branch = pushed_ref.split("refs/heads/", 1)[1]
 
-        if not hmac.compare_digest(expected_signature, signature_header):
+        config: RepoConfig | None = db.query(RepoConfig).filter(
+            RepoConfig.repo_url == repo_cloned_url,
+            RepoConfig.main_branch == pushed_branch
+        ).first()
+
+        webhook = (
+            db.query(Webhook)
+            .filter(
+                Webhook.repo_id == config.id,
+            ).first()
+        )
+        
+        print(expected_signature)
+        print(signature_header)
+        print(webhook.encoded_webhook_secret)
+
+        # if not hmac.compare_digest(expected_signature, signature_header):
+        #     print("Invalid signature")
+        #     raise HTTPException(
+        #         status_code=status.HTTP_403_FORBIDDEN,
+        #         detail="Invalid signature error!"
+        #     )
+
+        if verify_signature(webhook.encoded_webhook_secret, payload_bytes, signature_header):
+            print("Signature verified!")
+        else:
             print("Invalid signature")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid signature error!"
             )
 
-        print("Signature verified!")
 
         print("Received payload:")
 
@@ -312,19 +375,6 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             return {
                 "message": f"Ignored event. {event_type}"
             }
-
-        try:
-            pushed_ref = payload_json.get("ref")
-            repo_cloned_url = payload_json.get("repository", {}).get("clone_url")
-            pushed_branch = pushed_ref.split("refs/heads/", 1)[1]
-            commit_sha = payload_json.get("after")
-            github_delivery_id = request.headers.get("X-GitHub-Delivery")
-        except KeyError as e:
-            print(f"Missing key in payload. Key: '{e}'")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Missing key in payload. Key: '{e}'"
-            )
 
         config: RepoConfig | None = db.query(RepoConfig).filter(
             RepoConfig.repo_url == repo_cloned_url,
@@ -357,7 +407,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             db.commit()
             db.refresh(pipeline_run)
             pipeline_id = pipeline_run.id
-            git_success = handle_git_update(config)
+            git_success = await asyncio.to_thread(handle_git_update, config)
             if not git_success:
                 print("Git action unsucessfull")
                 update_pipeline_status(
@@ -388,11 +438,12 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             image_name = f"ci-image-{config.main_branch}-{pipeline_id}"
             container_name = f"ci-container-{config.main_branch}-{pipeline_id}"
 
-            deploy_success, deploy_logs = build_deploy_docker(
-                repo_dir=repo_path,
-                image_name=image_name,
-                container_name=container_name,
-                username=config.docker_username
+            deploy_success, deploy_logs = await asyncio.to_thread(
+                build_deploy_docker,
+                repo_path,
+                image_name,
+                container_name,
+                config.docker_username
             )
             status_log += deploy_logs
             if not deploy_success:
