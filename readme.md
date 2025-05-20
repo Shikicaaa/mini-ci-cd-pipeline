@@ -31,7 +31,7 @@ Once the webhook is configured on a repository (with signature):
 
 ## How to Use
 
-1. **Register/Login** through the API (or UI if implemented).
+1. **Register/Login** through the API.
 2. Navigate to your **dashboard**.
 3. Add a Git repository with a valid `Dockerfile`.
 4. Provide your **Docker Hub username**.
