@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard';
 
 
 const App = () => {
-  console.log(import.meta.env.VITE_API_URL)
+  // console.log(import.meta.env.VITE_API_URL)
   return (
     <AuthProvider>
       <Router>
