@@ -12,6 +12,10 @@ from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 
 from api.api_users import router as user_router
 from api.api_main import router as main_router
@@ -23,11 +27,12 @@ from api.api_users import get_db
 from models.repo_model import RepoConfig, Webhook
 from models.pipeline_test_model import PipelineRuns, PipelineStatusEnum
 
+import re
 import uvicorn
 
 load_dotenv()
 
-
+limiter = Limiter(key_func=get_remote_address)
 webhook_app = FastAPI(version="0.3.0")
 
 webhook_app.include_router(user_router, prefix="/auth", tags=["Auth"])
@@ -53,6 +58,48 @@ if not FERNET_SECRET_KEY:
 
 fernet = Fernet(FERNET_SECRET_KEY.encode())
 
+
+@webhook_app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded"}
+    )
+
+
+def is_dockerfile_safe(dockerfile_content: str) -> bool:
+    banned_patterns = [
+        'docker.sock',
+        'privileged',
+        'ADD http',
+        'ADD https',
+        'curl .*\\|',
+        'wget .*\\|',
+        'chmod 777',
+        'chown root',
+        '--cap-add',
+    ]
+    for pattern in banned_patterns:
+        if re.search(pattern, dockerfile_content, re.IGNORECASE):
+            return False
+    return True
+
+
+def find_dockerfile(repo_dir: str) -> str | None:
+    possible_names = [
+        "Dockerfile",
+        "dockerfile",
+        "Dockerfile.dev",
+        "Dockerfile.prod",
+        "Dockerfile.test"
+    ]
+
+    for name in possible_names:
+        dockerfile_path = os.path.join(repo_dir, name)
+        if os.path.isfile(dockerfile_path):
+            return dockerfile_path
+
+    return None
 
 
 def verify_signature(encrypted_secret: str, payload: bytes, signature_header: str) -> bool:
@@ -152,6 +199,22 @@ def build_deploy_docker(
 
     all_logs += "Building Docker image...\n"
     print("Building Multiplatform Docker image...")
+    dockerfile_loc = find_dockerfile(repo_dir)
+    if dockerfile_loc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dockerfile not found"
+        )
+    
+    with open(dockerfile_loc, "r") as f:
+        dockerfile = f.read()
+    
+    if not is_dockerfile_safe(dockerfile):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Program has found suspicious content in the dockerfile!"
+        )
+    
     success, build_log = run_command([
         "docker", "buildx", "build",
         "--platform", "linux/amd64,linux/arm64",
@@ -188,20 +251,21 @@ def build_deploy_docker(
     all_logs += "\n--- Removing Container Logs ---\n"
     all_logs += rm_log + "\n"
 
-    print("Running tests inside temporary container...")
-    run_success, run_log = run_command([
-        "docker", "run", "-d",
-        "--name", container_name,
-        "-p", "8080:80",
-        f"{username}/{image_name}"
-    ])
-    all_logs += "\n--- Run container log---\n" + run_log + "\n"
-    if not run_success:
-        print("Error: Failed to run Docker container")
-        run_command(["docker", "rm", "-f", container_name])
-        return False, all_logs
-    all_logs += f"Docker container '{container_name}' successfully started.\n"
-    all_logs += f"--- Docker Build & Deploy finished for image: {image_name} ---\n"
+    # print("Running tests inside temporary container...")
+    # run_success, run_log = run_command([
+    #     "docker", "run", "-d",
+    #     "--name", container_name,
+    #     "-p", "8080:80",
+    #     f"{username}/{image_name}"
+    # ])
+    # all_logs += "\n--- Run container log---\n" + run_log + "\n"
+    # if not run_success:
+    #     print("Error: Failed to run Docker container")
+    #     run_command(["docker", "rm", "-f", container_name])
+    #     return False, all_logs
+    # all_logs += f"Docker container '{container_name}' successfully started.\n"
+    # all_logs += f"--- Docker Build & Deploy finished for image: {image_name} ---\n"
+    all_logs += "Skipped deploy due to security reasons.\n"
     return True, all_logs
 
 
@@ -375,11 +439,6 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             return {
                 "message": f"Ignored event. {event_type}"
             }
-
-        config: RepoConfig | None = db.query(RepoConfig).filter(
-            RepoConfig.repo_url == repo_cloned_url,
-            RepoConfig.main_branch == pushed_branch
-        ).first()
 
         if not config:
             raise HTTPException(
