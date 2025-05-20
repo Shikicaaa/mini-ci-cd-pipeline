@@ -12,10 +12,6 @@ from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from fastapi.responses import JSONResponse
 
 from api.api_users import router as user_router
 from api.api_main import router as main_router
@@ -32,7 +28,6 @@ import uvicorn
 
 load_dotenv()
 
-limiter = Limiter(key_func=get_remote_address)
 webhook_app = FastAPI(version="0.3.0")
 
 webhook_app.include_router(user_router, prefix="/auth", tags=["Auth"])
@@ -41,9 +36,11 @@ webhook_app.include_router(docker_router, tags=["Docker"])
 webhook_app.include_router(pipeline_router, tags=["Pipeline"])
 webhook_app.include_router(config_router, tags=["RepoConfig", "Config"])
 
+ORIGINS = os.getenv("ORIGINS")
+
 webhook_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,14 +54,6 @@ if not FERNET_SECRET_KEY:
     raise RuntimeError("FERNET_SECRET_KEY is missing in .env")
 
 fernet = Fernet(FERNET_SECRET_KEY.encode())
-
-
-@webhook_app.exception_handler(RateLimitExceeded)
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=429,
-        content={"detail": "Rate limit exceeded"}
-    )
 
 
 def is_dockerfile_safe(dockerfile_content: str) -> bool:
@@ -566,4 +555,4 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
 
 if __name__ == "__main__":
     print("Starting webhook server!")
-    uvicorn.run(webhook_app, host="127.0.0.1", port=9000, log_level="info")
+    uvicorn.run(webhook_app, host="0.0.0.0", port=9000, log_level="info")
