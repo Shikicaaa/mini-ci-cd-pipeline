@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { registerUser } from '../auth/authservice'; 
 import type { RegisterRequest } from '../types/types';
+import type { AxiosError } from 'axios';
 
 const RegisterForm = () => {
     const [form, setForm] = useState<RegisterRequest>({
@@ -27,9 +28,14 @@ const RegisterForm = () => {
             const registerRes = await registerUser(form);
             console.log(await registerRes);
             navigate('/login');
-        } catch (err: any) {
+        } catch (err) {
+            const error = err as AxiosError;
             console.error(err)
-            setError(err.response.data.detail.toString());
+            if (error.response && error.response.data) {
+                setError(error.response.data.toString());
+            } else {
+                setError('Unexpected error occurred');
+            }
         }
     };
 

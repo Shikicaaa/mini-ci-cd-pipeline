@@ -8,6 +8,7 @@ export function parseJwt(token: string) {
 
         return JSON.parse(jsonPayload);
     } catch (e) {
+        console.error(e);
         return null;
     }
 }

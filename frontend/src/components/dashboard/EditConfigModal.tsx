@@ -3,6 +3,7 @@ import api from "../../api/axios";
 import type { Config } from "../../types/types";
 import type { BackendPayload } from "../../types/types";
 import type { FormDataShape } from "../../types/types";
+import type { AxiosError } from "axios";
 
 
 interface EditConfigModalProps {
@@ -10,6 +11,12 @@ interface EditConfigModalProps {
   onClose: () => void;
   config: Config | null;
   onSave: (updatedConfig: Config) => void;
+}
+
+interface ValidationError {
+  loc: string[];
+  msg: string;
+  [key: string]: unknown;
 }
 
 const EditConfigModal: React.FC<EditConfigModalProps> = ({
@@ -92,31 +99,34 @@ const EditConfigModal: React.FC<EditConfigModalProps> = ({
         );
         await onSave(response.data);
         onClose();
-      } catch (err: any) {
+      } catch (err) {
         let errorMessage = "Failed to update config";
-        if (err.response && err.response.data) {
+        const error = err as AxiosError;
+        if (error.response && error.response.data) {
           if (
-            err.response.data.detail &&
-            Array.isArray(err.response.data.detail)
+            error.response.data &&
+            Array.isArray(error.response.data)
           ) {
-            errorMessage = err.response.data.detail
-              .map((d: any) => {
+            errorMessage = error.response.data
+              .map((d: ValidationError) => {
                 const field = d.loc && d.loc.length > 1 ? d.loc[1] : "error";
                 return `${field} - ${d.msg}`;
               })
               .join("; ");
-          } else if (typeof err.response.data.detail === "string") {
-            errorMessage = err.response.data.detail;
+          } else if (typeof error.response.data === "string") {
+            errorMessage = error.response.data;
           } else {
             try {
-              errorMessage = JSON.stringify(err.response.data);
-            } catch {}
+              errorMessage = JSON.stringify(error.response.data);
+            } catch {
+              //nesto
+            }
           }
-        } else if (err.message) {
-          errorMessage = err.message;
+        } else if (error.message) {
+          errorMessage = error.message;
         }
         alert(`Error updating config: ${errorMessage}`);
-        console.error("Update error details:", err.response?.data || err);
+        console.error("Update error details:", error.response?.data || err);
       }
     };
   

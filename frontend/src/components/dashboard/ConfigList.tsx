@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ConfigResponse as Config } from '../../types/types';
 import api from '../../api/axios';
 import ConfigListItem from './ConfigListItem';
+import type { AxiosError } from 'axios';
 
 interface ConfigsListProps {
     onEditConfig: (config: Config) => void;
@@ -20,13 +21,15 @@ interface ConfigsListProps {
         try {
           const response = await api.get<Config[]>("/api/config");
           setConfigs(response.data);
-        } catch (err: any) {
-          setError(
-            err.response?.data?.detail ||
-              err.message ||
-              "Failed to fetch configs"
-          );
-        } finally {
+        } catch (err) {
+          const error = err as AxiosError;
+          console.error(err)
+          if (error.response && error.response.data) {
+              setError(error.response.data.toString());
+          } else {
+              setError('Unexpected error occurred');
+          }
+      } finally {
           setLoading(false);
         }
       };

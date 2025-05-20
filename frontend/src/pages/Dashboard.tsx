@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { ConfigResponse as Config } from "../types/types";
 import Navbar from "../components/Navbar";
 import TabNavigation from "../components/dashboard/TabNavigation";

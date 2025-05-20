@@ -18,12 +18,8 @@ const PipelinesList: React.FC = () => {
         setPipelineRuns(
           response.data.map((run) => ({ ...run, logsExpanded: false }))
         );
-      } catch (err: any) {
-        setError(
-          err.response?.data?.detail ||
-            err.message ||
-            "Failed to fetch pipeline runs"
-        );
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }

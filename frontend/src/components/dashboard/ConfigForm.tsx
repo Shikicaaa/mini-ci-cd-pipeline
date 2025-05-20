@@ -23,15 +23,9 @@ const ConfigForm: React.FC = () => {
         await api.post("/api/config", configPayload);
         alert('Configuration submitted successfully!');
         form.reset();
-      } catch (err: any) {
-        alert(
-          `Error: ${
-            err.response?.data?.detail ||
-            err.message ||
-            "Failed to submit config"
-          }`
-        );
-      }
+      } catch (err) {
+        console.error(err);
+    }
     }
     return (
         <div className="bg-gray-700 p-6 rounded-lg shadow-inner">

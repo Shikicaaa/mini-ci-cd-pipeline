@@ -36,8 +36,10 @@ const LoginForm = () => {
             }
             
             window.location.replace('/');
-        } catch (err: any) {
-            setError(err.response.data.detail.toString());
+        } catch (err) {
+            const error = err as string;
+            setError(error);
+            console.error(err);
         }
     };
 

@@ -11,6 +11,7 @@ const formatDate = (dateString?: string | Date | null) => {
     try {
       return new Date(dateString).toLocaleString();
     } catch (e) {
+      console.error(e);
       if (typeof dateString === 'string') return dateString;
       return 'Invalid Date';
     }

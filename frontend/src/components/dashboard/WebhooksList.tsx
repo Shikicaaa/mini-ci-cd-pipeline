@@ -24,8 +24,8 @@ const WebhooksList: React.FC = () => {
         try {
             await api.delete(`/api/webhook/${id}`);
             setWebhooks((prev) => prev.filter((wh) => wh.id !== id));
-        } catch (err: any) {
-            alert("Failed to delete webhook: " + (err.response?.data?.detail || err.message));
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -52,12 +52,8 @@ const WebhooksList: React.FC = () => {
             try {
                 const response = await api.get<Webhook[]>("/api/webhooks");
                 setWebhooks(response.data.map((webhook) => ({ ...webhook })));
-            } catch (err: any) {
-                setError(
-                    err.response?.data?.detail ||
-                    err.message ||
-                    "Failed to fetch webhooks"
-                );
+            } catch (err) {
+                console.error(err);
             } finally {
                 setLoading(false);
             }
@@ -76,8 +72,8 @@ const WebhooksList: React.FC = () => {
             }});
             setGenerated(response.data);
             setShowSecret(true);
-        } catch (err: any) {
-            alert("Failed to generate webhook: " + (err.response?.data?.detail || err.message));
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -92,8 +88,8 @@ const WebhooksList: React.FC = () => {
             });
             setShowSecret(false);
             alert("Webhook saved to database.");
-        } catch (err: any) {
-            alert("Failed to confirm webhook: " + (err.response?.data?.detail || err.message));
+        } catch (err) {
+            console.error(err);
         } finally {
             setConfirming(false);
         }

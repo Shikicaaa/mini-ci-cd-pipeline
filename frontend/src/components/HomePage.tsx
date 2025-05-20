@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
 import Navbar from './Navbar';
 
 const HomePage = () => {

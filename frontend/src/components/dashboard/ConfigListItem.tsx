@@ -18,14 +18,8 @@ const ConfigListItem: React.FC<ConfigListItemProps> = ({ config, onEdit, onDelet
       try {
         await api.delete(`/api/config/${config.id}`);
         onDelete(config.id);
-      } catch (err: any) {
-        alert(
-          `Error: ${
-            err.response?.data?.detail ||
-            err.message ||
-            "Failed to delete config"
-          }`
-        );
+      } catch (err) {
+        console.error(err);
       }
     }
   };

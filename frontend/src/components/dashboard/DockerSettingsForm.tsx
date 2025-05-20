@@ -16,14 +16,8 @@ const DockerSettingsForm: React.FC = () => {
         });
         alert('Docker settings submitted successfully!');
         form.reset();
-      } catch (err: any) {
-        alert(
-          `Error: ${
-            err.response?.data?.detail ||
-            err.message ||
-            "Failed to submit Docker config"
-          }`
-        );
+      } catch (err) {
+        console.error(err);
       }
     };
     return (
