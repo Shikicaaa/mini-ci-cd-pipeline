@@ -82,7 +82,7 @@ def find_dockerfile(repo_dir: str) -> str | None:
         "Dockerfile.prod",
         "Dockerfile.test"
     ]
-
+    print(repo_dir)
     for name in possible_names:
         dockerfile_path = os.path.join(repo_dir, name)
         if os.path.isfile(dockerfile_path):
@@ -482,7 +482,7 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
                 pipeline_id,
                 PipelineStatusEnum.RUNNING_DOCKER_BUILD
             )
-            repo_path = os.path.join(WORKSPACE_DIR, "repo")
+            repo_path = os.path.join(WORKSPACE_DIR, f"{config.id}")
             image_name = f"ci-image-{config.main_branch}-{pipeline_id}"
             container_name = f"ci-container-{config.main_branch}-{pipeline_id}"
 
