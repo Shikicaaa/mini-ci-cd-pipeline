@@ -61,3 +61,4 @@ sequenceDiagram
  - Add **Celery** for asynchronous job handling
  - Add support for **remote deployment to cloud or on-prem environments**
  - Responsive frontend
+ - Implement docker sandbox
