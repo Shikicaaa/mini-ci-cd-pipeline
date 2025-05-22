@@ -1,4 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, Boolean
+from sqlalchemy import (
+    Column, Integer, String,
+    ForeignKey, Table, Boolean,
+    BigInteger
+)
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .base import Base
 
@@ -24,6 +28,7 @@ class RepoConfig(Base):
     repo_url: Mapped[str] = mapped_column(String)
     main_branch: Mapped[str] = mapped_column(String)
     docker_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    installation_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
     SSH_host: Mapped[str] = mapped_column(String, nullable=True)
     SSH_port: Mapped[int] = mapped_column(Integer, nullable=True)
     SSH_username: Mapped[str] = mapped_column(String, nullable=True)

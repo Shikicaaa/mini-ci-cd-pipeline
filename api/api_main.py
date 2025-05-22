@@ -56,7 +56,7 @@ async def generate_webhook(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Webhook already exists for this configuration!"
         )
-    
+
     secret = ''.join(random.choices(string.ascii_letters + string.digits, k=256))
     return {
         "url": "test",
@@ -74,8 +74,6 @@ async def confirm_webhook(
     secret = payload.secret
     repo_id = payload.repo_id
     print("PROSAO")
-
-    hashed_secret = pwd_context.hash(secret)
 
     repo = (
         db.query(RepoConfig)
@@ -97,7 +95,6 @@ async def confirm_webhook(
     )
     db.add(webhook)
     db.commit()
-    
 
 
 @router.get("/api/webhooks")

@@ -20,7 +20,7 @@ from api.api_pipeline import router as pipeline_router
 from api.api_docker import router as docker_router
 
 from api.api_users import get_db
-from models.repo_model import RepoConfig, Webhook
+from models.repo_model import RepoConfig
 from models.pipeline_test_model import PipelineRuns, PipelineStatusEnum
 
 import re
@@ -40,6 +40,7 @@ ORIGINS = os.getenv("ORIGINS")
 
 webhook_app.add_middleware(
     CORSMiddleware,
+    # allow_origins=["*"],
     allow_origins=[ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
@@ -48,7 +49,7 @@ webhook_app.add_middleware(
 
 WORKSPACE_DIR = "ci_workspace"
 
-GITHUB_SECRET_HEADER = os.getenv("GITHUB_SECRET_HEADER")
+GITHUB_APP_WEBHOOK_SECRET = os.getenv("GITHUB_APP_WEBHOOK_SECRET")
 FERNET_SECRET_KEY = os.getenv("FERNET_SECRET_KEY")
 if not FERNET_SECRET_KEY:
     raise RuntimeError("FERNET_SECRET_KEY is missing in .env")
@@ -91,7 +92,11 @@ def find_dockerfile(repo_dir: str) -> str | None:
     return None
 
 
-def verify_signature(encrypted_secret: str, payload: bytes, signature_header: str) -> bool:
+def verify_signature(
+    encrypted_secret: str,
+    payload: bytes,
+    signature_header: str
+) -> bool:
     if not signature_header.startswith("sha256="):
         return False
     received_sig = signature_header.split("=")[1]
@@ -190,20 +195,18 @@ def build_deploy_docker(
     print("Building Multiplatform Docker image...")
     dockerfile_loc = find_dockerfile(repo_dir)
     if dockerfile_loc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dockerfile not found"
-        )
-    
+        all_logs += "Docker image not found\n"
+        return False, all_logs
+
+    all_logs += f"Docker image found at {dockerfile_loc}\n"
     with open(dockerfile_loc, "r") as f:
         dockerfile = f.read()
-    
+
     if not is_dockerfile_safe(dockerfile):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Program has found suspicious content in the dockerfile!"
-        )
-    
+        all_logs += "Docker image is not safe\n"
+        return False, all_logs
+
+    all_logs += "Docker image is safe...\n"
     success, build_log = run_command([
         "docker", "buildx", "build",
         "--platform", "linux/amd64,linux/arm64",
@@ -357,187 +360,215 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
     print("Received Webhook")
     pipeline_id: int | None = None
     status_log = ""
-    if not GITHUB_SECRET_HEADER:
+    if not GITHUB_APP_WEBHOOK_SECRET:
         print("Webhook secret not defined")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Webhook secret not defined"
         )
     signature_header = request.headers.get("X-Hub-Signature-256")
+
     if not signature_header:
-        print("No signature header")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No signature header!"
-        )
+        raise HTTPException(status_code=400, detail="Missing signature")
+
+    scheme, signature = signature_header.split("=", 1)
+    if scheme != "sha256":
+        raise HTTPException(status_code=400, detail="Unsupported signature scheme")
+    print(signature_header)
 
     try:
         payload_bytes = await request.body()
         payload_string = payload_bytes.decode("utf-8")
         payload_json = json.loads(payload_string)
 
-        expected_signature = "sha256=" + hmac.new(
-            key=GITHUB_SECRET_HEADER.encode(),
-            msg=payload_bytes,
-            digestmod=hashlib.sha256
+        expected_signature = hmac.new(
+            GITHUB_APP_WEBHOOK_SECRET.encode(),
+            payload_bytes,
+            hashlib.sha256
         ).hexdigest()
-        pushed_ref = payload_json.get("ref")
-        commit_sha = payload_json.get("after")
-        github_delivery_id = request.headers.get("X-GitHub-Delivery")
-        repo_cloned_url = payload_json.get("repository", {}).get("clone_url")
-        pushed_branch = pushed_ref.split("refs/heads/", 1)[1]
 
-        config: RepoConfig | None = db.query(RepoConfig).filter(
-            RepoConfig.repo_url == repo_cloned_url,
-            RepoConfig.main_branch == pushed_branch
-        ).first()
-
-        webhook = (
-            db.query(Webhook)
-            .filter(
-                Webhook.repo_id == config.id,
-            ).first()
-        )
-        
-        print(expected_signature)
-        print(signature_header)
-        print(webhook.encoded_webhook_secret)
-
-        # if not hmac.compare_digest(expected_signature, signature_header):
-        #     print("Invalid signature")
-        #     raise HTTPException(
-        #         status_code=status.HTTP_403_FORBIDDEN,
-        #         detail="Invalid signature error!"
-        #     )
-
-        if verify_signature(webhook.encoded_webhook_secret, payload_bytes, signature_header):
-            print("Signature verified!")
-        else:
-            print("Invalid signature")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid signature error!"
-            )
-
+        if not hmac.compare_digest(signature, expected_signature):
+            raise HTTPException(status_code=403, detail="Invalid signature")
 
         print("Received payload:")
 
         event_type = request.headers.get("X-GitHub-Event")
-        if event_type != "push":
-            print("Not a push event, ignoring...")
+        if event_type == "push":
+            pushed_ref = payload_json.get("ref")
+            commit_sha = payload_json.get("after")
+            github_delivery_id = request.headers.get("X-GitHub-Delivery")
+            repo_cloned_url = payload_json.get("repository", {}).get("clone_url")
+            pushed_branch = pushed_ref.split("refs/heads/", 1)[1]
+
+            config: RepoConfig | None = db.query(RepoConfig).filter(
+                RepoConfig.repo_url == repo_cloned_url,
+                RepoConfig.main_branch == pushed_branch
+            ).first()
+
+            if not config:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Config doesn't exist in database"
+                )
+
+            expected_ref = f"refs/heads/{config.main_branch}"
+            config_repo_url = str(config.repo_url)
+
+            if pushed_ref == expected_ref and repo_cloned_url == config_repo_url:
+                print(f"Detected push on {config.main_branch} {config.repo_url}.")
+                print("Pulling the code.")
+                status_log += f"Found matching config {config.id}."
+                status_log += f" Starting pipeline for commit {commit_sha[:7]}...\n"
+
+                pipeline_run = PipelineRuns(
+                    config_id=config.id,
+                    status=PipelineStatusEnum.PENDING,
+                    commit_sha=commit_sha,
+                    trigger_event_id=github_delivery_id,
+                    logs=status_log.strip()
+                )
+                db.add(pipeline_run)
+                db.commit()
+                db.refresh(pipeline_run)
+                pipeline_id = pipeline_run.id
+                git_success = await asyncio.to_thread(handle_git_update, config)
+                if not git_success:
+                    print("Git action unsucessfull")
+                    update_pipeline_status(
+                        db,
+                        pipeline_id,
+                        PipelineStatusEnum.FAILED_GIT,
+                        status_log
+                    )
+                    save_logs_to_file(pipeline_run.id, status_log)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Git action unsucessfull!"
+                    )
+
+                update_pipeline_status(
+                    db,
+                    pipeline_id,
+                    PipelineStatusEnum.RUNNING_GIT,
+                    status_log
+                )
+                status_log = ""
+                update_pipeline_status(
+                    db,
+                    pipeline_id,
+                    PipelineStatusEnum.RUNNING_DOCKER_BUILD
+                )
+                repo_path = os.path.join(WORKSPACE_DIR, f"{config.id}")
+                image_name = f"ci-image-{config.main_branch}-{pipeline_id}"
+                container_name = f"ci-container-{config.main_branch}-{pipeline_id}"
+
+                deploy_success, deploy_logs = await asyncio.to_thread(
+                    build_deploy_docker,
+                    repo_path,
+                    image_name,
+                    container_name,
+                    config.docker_username
+                )
+                status_log += deploy_logs
+                if not deploy_success:
+                    final_status = PipelineStatusEnum.FAILED_DOCKER_BUILD
+                    if (
+                        "docker run" in deploy_logs.lower() and
+                        "failed" in deploy_logs.lower()
+                    ):
+                        final_status = PipelineStatusEnum.FAILED_DOCKER_DEPLOY
+                    update_pipeline_status(
+                        db,
+                        pipeline_id,
+                        final_status,
+                        status_log
+                    )
+                    save_logs_to_file(pipeline_run.id, status_log)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Docker build/deploy was unsuccessfull!"
+                    )
+
+                update_pipeline_status(
+                    db,
+                    pipeline_id,
+                    PipelineStatusEnum.RUNNING_DOCKER_DEPLOY,
+                    status_log
+                )
+                update_pipeline_status(
+                    db,
+                    pipeline_id,
+                    PipelineStatusEnum.SUCCESS
+                )
+                save_logs_to_file(pipeline_run.id, status_log)
+                return {
+                    "message": f"PipelineRun ID={pipeline_id} finished successfully." +
+                    f"App deployed as {container_name}."
+                }
+
+            else:
+                print(f"'{pushed_ref}'vs'{expected_ref}' ({pushed_ref == expected_ref})")
+                print(
+                    f"'{repo_cloned_url}' vs '{config_repo_url}'",
+                    f" ({repo_cloned_url == config_repo_url})"
+                )
+                save_logs_to_file(pipeline_run.id, status_log)
+                return {"status": "Ignored does not match config"}
+        elif event_type == "installation":
+            installation_id = payload_json["installation"]["id"]
+            repositories = payload_json.get("repositories", [])
+
+            for repo in repositories:
+                repo_url = f"https://github.com/{repo['full_name']}.git"
+                config = (
+                    db.query(RepoConfig)
+                    .filter(RepoConfig.repo_url == repo_url)
+                    .first()
+                )
+
+                if config:
+                    config.installation_id = installation_id
+                else:
+                    new_config = RepoConfig(
+                        repo_url=repo_url,
+                        main_branch="main",
+                        installation_id=installation_id,
+                        SSH_for_deploy=False
+                    )
+                    db.add(new_config)
+
+            db.commit()
+            return {"status": "Installation info saved"}
+        elif event_type == "installation_repositories":
+            installation_id = payload_json["installation"]["id"]
+            repos_added = payload_json["repositories_added"]
+
+            for repo in repos_added:
+                repo_url = repo["clone_url"]
+                config = (
+                    db.query(RepoConfig)
+                    .filter(RepoConfig.repo_url == repo_url)
+                    .first()
+                )
+
+                if config:
+                    config.installation_id = installation_id
+                else:
+                    new_config = RepoConfig(
+                        repo_url=repo_url,
+                        main_branch="main",
+                        installation_id=installation_id,
+                        SSH_for_deploy=False
+                    )
+                    db.add(new_config)
+
+            db.commit()
+            return {"status": "Repositories added to installation"}
+        else:
+            print("Ignoring...")
             return {
                 "message": f"Ignored event. {event_type}"
             }
-
-        if not config:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Config doesn't exist in database"
-            )
-
-        expected_ref = f"refs/heads/{config.main_branch}"
-        config_repo_url = str(config.repo_url)
-
-        if pushed_ref == expected_ref and repo_cloned_url == config_repo_url:
-            print(f"Detected push on {config.main_branch} {config.repo_url}.")
-            print("Pulling the code.")
-            status_log += f"Found matching config {config.id}."
-            status_log += f" Starting pipeline for commit {commit_sha[:7]}...\n"
-
-            pipeline_run = PipelineRuns(
-                config_id=config.id,
-                status=PipelineStatusEnum.PENDING,
-                commit_sha=commit_sha,
-                trigger_event_id=github_delivery_id,
-                logs=status_log.strip()
-            )
-            db.add(pipeline_run)
-            db.commit()
-            db.refresh(pipeline_run)
-            pipeline_id = pipeline_run.id
-            git_success = await asyncio.to_thread(handle_git_update, config)
-            if not git_success:
-                print("Git action unsucessfull")
-                update_pipeline_status(
-                    db,
-                    pipeline_id,
-                    PipelineStatusEnum.FAILED_GIT,
-                    status_log
-                )
-                save_logs_to_file(pipeline_run.id, status_log)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Git action unsucessfull!"
-                )
-
-            update_pipeline_status(
-                db,
-                pipeline_id,
-                PipelineStatusEnum.RUNNING_GIT,
-                status_log
-            )
-            status_log = ""
-            update_pipeline_status(
-                db,
-                pipeline_id,
-                PipelineStatusEnum.RUNNING_DOCKER_BUILD
-            )
-            repo_path = os.path.join(WORKSPACE_DIR, f"{config.id}")
-            image_name = f"ci-image-{config.main_branch}-{pipeline_id}"
-            container_name = f"ci-container-{config.main_branch}-{pipeline_id}"
-
-            deploy_success, deploy_logs = await asyncio.to_thread(
-                build_deploy_docker,
-                repo_path,
-                image_name,
-                container_name,
-                config.docker_username
-            )
-            status_log += deploy_logs
-            if not deploy_success:
-                final_status = PipelineStatusEnum.FAILED_DOCKER_BUILD
-                if (
-                    "docker run" in deploy_logs.lower() and
-                    "failed" in deploy_logs.lower()
-                ):
-                    final_status = PipelineStatusEnum.FAILED_DOCKER_DEPLOY
-                update_pipeline_status(
-                    db,
-                    pipeline_id,
-                    final_status,
-                    status_log
-                )
-                save_logs_to_file(pipeline_run.id, status_log)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Docker build/deploy was unsuccessfull!"
-                )
-
-            update_pipeline_status(
-                db,
-                pipeline_id,
-                PipelineStatusEnum.RUNNING_DOCKER_DEPLOY,
-                status_log
-            )
-            update_pipeline_status(
-                db,
-                pipeline_id,
-                PipelineStatusEnum.SUCCESS
-            )
-            save_logs_to_file(pipeline_run.id, status_log)
-            return {
-                "message": f"PipelineRun ID={pipeline_id} finished successfully." +
-                f"App deployed as {container_name}."
-            }
-
-        else:
-            print(f"'{pushed_ref}' vs '{expected_ref}' ({pushed_ref == expected_ref})")
-            print(
-                f"'{repo_cloned_url}' vs '{config_repo_url}'",
-                f" ({repo_cloned_url == config_repo_url})"
-            )
-            save_logs_to_file(pipeline_run.id, status_log)
-            return {"status": "Ignored does not match config"}
 
     except json.JSONDecodeError:
         print("Error, json cannot be parsed!")

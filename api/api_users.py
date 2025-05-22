@@ -4,7 +4,6 @@ from db import SessionLocal
 from models.user_model import User, hash_password, verify_password
 from auth.jwt_handler import create_token, decode_token
 from pydantic import BaseModel, EmailStr
-from webhook_server import limiter
 
 
 class RegisterRequest(BaseModel):
@@ -63,7 +62,7 @@ def get_current_user(
         )
     return user
 
-@limiter.limit("5/minute")
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(
     user_data: RegisterRequest,
@@ -90,7 +89,7 @@ def register(
         "message": "User registered successfully!"
     }
 
-@limiter.limit("5/minute")
+
 @router.post("/login", status_code=status.HTTP_200_OK)
 def login(
     form_data: LoginRequest,
