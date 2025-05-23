@@ -1,6 +1,6 @@
 import React from 'react';
 
-type TabName = "repository" | "docker" | "configs" | "pipelines" | "webhooks";
+type TabName = "repository" | "docker" | "configs" | "pipelines" /*| "webhooks"*/;
 
 interface TabNavigationProps {
     activeTab: TabName;
@@ -12,7 +12,7 @@ interface TabNavigationProps {
     { id: "docker", label: "Docker Settings" },
     { id: "configs", label: "Configs" },
     { id: "pipelines", label: "Pipelines" },
-    { id: "webhooks", label: "Manage webhooks" },
+    // { id: "webhooks", label: "Manage webhooks" },
   ];
 
   const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange }) => {

@@ -7,9 +7,9 @@ import DockerSettingsForm from "../components/dashboard/DockerSettingsForm";
 import ConfigsList from "../components/dashboard/ConfigList";
 import PipelinesList from "../components/dashboard/PipelineList";
 import EditConfigModal from "../components/dashboard/EditConfigModal";
-import WebhooksList from "../components/dashboard/WebhooksList";
+// import WebhooksList from "../components/dashboard/WebhooksList";
 
-type TabName = "repository" | "docker" | "configs" | "webhooks" | "pipelines";
+type TabName = "repository" | "docker" | "configs" | /*"webhooks" |*/ "pipelines";
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<TabName>("repository");
@@ -43,7 +43,7 @@ const Dashboard = () => {
           {activeTab === "docker" && <DockerSettingsForm />}
           {activeTab === "configs" && <ConfigsList onEditConfig={handleEditConfig} />}
           {activeTab === "pipelines" && <PipelinesList />}
-          {activeTab === "webhooks" && <WebhooksList />}
+          {/* {activeTab === "webhooks" && <WebhooksList />} */}
         </div>
       </div>
       <EditConfigModal

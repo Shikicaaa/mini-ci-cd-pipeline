@@ -4,6 +4,7 @@ import RegisterForm from './components/RegisterForm';
 import HomePage from './components/HomePage';
 import { AuthProvider } from './auth/AuthContext';
 import Dashboard from './pages/Dashboard';
+import ThankYouForm from './components/ThankYouForm';
 
 
 const App = () => {
@@ -16,6 +17,7 @@ const App = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginForm />} />
           <Route path="/register" element={<RegisterForm />} />
+          <Route path="/thank-you" element={<ThankYouForm />}/>
         </Routes>
       </Router>
     </AuthProvider>
