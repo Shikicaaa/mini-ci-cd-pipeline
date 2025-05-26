@@ -11,7 +11,7 @@ const Navbar = () => {
         <a className="text-white! font-bold! p-2 hover:text-blue-400!" href="/">
           CI-CD PIPELINE
         </a>
-        <a className="text-white! font-bold! p-4 hover:text-blue-400!" href="https://github.com/Shikicaaa/mini-ci-cd-pipeline">
+        <a className="text-white! font-bold! p-4 hover:text-blue-400!" href="https://github.com/apps/mini-ci-cd-pipeline">
           GET THE APP
         </a>
       </div>

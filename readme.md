@@ -58,7 +58,8 @@ sequenceDiagram
  ```
 
  ## Future plans
- - Add **Celery** for asynchronous job handling
+ - ✅ Add **Celery** for asynchronous job handling
  - Add support for **remote deployment to cloud or on-prem environments**
  - Responsive frontend
- - Implement docker sandbox
+ - ✅? Implement docker sandbox
+ - Fully develop ssh connection
