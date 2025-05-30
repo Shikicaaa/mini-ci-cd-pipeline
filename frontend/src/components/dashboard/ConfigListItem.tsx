@@ -38,6 +38,14 @@ const ConfigListItem: React.FC<ConfigListItemProps> = ({ config, onEdit, onDelet
             Branch: <span className="font-semibold">{config.main_branch}</span>
           </p>
           <p className="text-sm text-gray-400">
+            SSH Clone: {config.use_ssh_for_clone ? "Enabled" : "Disabled"}
+          </p>
+          {config.use_ssh_for_clone && (
+            <p className="text-xs text-gray-500">
+              Host Key: {config.git_ssh_host_key || "Not set"}
+            </p>
+          )}
+          <p className="text-sm text-gray-400">
             SSH Deploy: {config.SSH_for_deploy ? "Enabled" : "Disabled"}
           </p>
           {config.SSH_for_deploy && (

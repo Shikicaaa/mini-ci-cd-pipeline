@@ -126,6 +126,8 @@ async def config_repo(
     user: User = Depends(get_current_user),
     db=Depends(get_db)
 ):
+    from helper.data import encrypt_data
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -133,6 +135,20 @@ async def config_repo(
         )
 
     repo_url = str(config_data.repo_url)
+    if not repo_url.startswith("https://"):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Repo URL must start with 'https://'."
+        )
+    valid_domains = ["github.com", "gitlab.com", "bitbucket.org"]
+    if not any(domain in repo_url for domain in valid_domains):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Repo URL must be from a valid domain: github.com, " +
+                "gitlab.com, or bitbucket.org."
+            )
+        )
     if repo_url.endswith(".com"):
         repo_url = repo_url[:-4]
         repo_url += ".git"
@@ -154,10 +170,26 @@ async def config_repo(
             detail="Identical configuration exists for this user!"
         )
 
+    if config_data.git_ssh_private_key_encrypted:
+        config_data.git_ssh_private_key_encrypted = encrypt_data(
+            config_data.git_ssh_private_key_encrypted
+        )
+    if config_data.git_ssh_key_passphrase_encrypted:
+        config_data.git_ssh_key_passphrase_encrypted = encrypt_data(
+            config_data.git_ssh_key_passphrase_encrypted
+        )
+    for key, value in config_data.model_dump(mode="python").items():
+        print(f"{key}: {value}")
     try:
         config = RepoConfig(
             repo_url=repo_url,
             main_branch=config_data.main_branch,
+            platform=config_data.platform,
+            installation_id=config_data.installation_id,
+            use_ssh_for_clone=config_data.use_ssh_for_clone,
+            git_ssh_private_key_encrypted=config_data.git_ssh_private_key_encrypted,
+            git_ssh_key_passphrase_encrypted=config_data.git_ssh_key_passphrase_encrypted,
+            git_ssh_host_key=config_data.git_ssh_host_key,
             SSH_host=config_data.SSH_host,
             SSH_port=config_data.SSH_port,
             SSH_username=config_data.SSH_username,
@@ -175,6 +207,7 @@ async def config_repo(
             "config": config_data,
         }
     except Exception as e:
+        print(f"Error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error: An unexpected error has occured: '{e}'"

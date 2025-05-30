@@ -74,6 +74,7 @@ const EditConfigModal: React.FC<EditConfigModalProps> = ({
         main_branch: formData.main_branch,
         SSH_for_deploy: !!formData.SSH_for_deploy,
         docker_username: formData.docker_username || null,
+        use_ssh_for_clone: !!formData.use_ssh_for_clone,
         // SSH_key_passphrase: formData.SSH_key_passphrase || null,
       };
   
@@ -173,6 +174,94 @@ const EditConfigModal: React.FC<EditConfigModalProps> = ({
             </div>
             <div className="mb-6 border border-gray-700 p-4 rounded-lg">
               <label className="flex items-center space-x-2 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                name="use_ssh_for_clone"
+                checked={!!formData.use_ssh_for_clone}
+                onChange={handleChange}
+                className="form-checkbox h-5 w-5 text-indigo-600 bg-gray-800 border-gray-600 rounded focus:ring-indigo-500"
+              />
+              <span className="text-gray-300">Use SSH for clone</span>
+              </label>
+              {formData.use_ssh_for_clone && (
+              <div className="space-y-3 mt-2">
+                {/* SSH Private Key Path for cloning */}
+                <div>
+                <label
+                  htmlFor="clone_ssh_key_path"
+                  className="block text-sm text-gray-400"
+                >
+                  SSH Private Key (for cloning)
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                  id="clone_ssh_key_path"
+                  type="text"
+                  name="git_ssh_private_key"
+                  value={formData.git_ssh_private_key || ""}
+                  onChange={handleChange}
+                  className="w-full mt-1 px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
+                  />
+                  <button
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev) => ({
+                    ...prev,
+                    git_ssh_private_key: "",
+                    git_ssh_passphrase: "",
+                    git_ssh_host_key: "",
+                    }));
+                  }}
+                  className="mt-1 px-3 py-2 border border-red-600 text-red-500 rounded-md hover:bg-red-500 hover:text-white focus:outline-none focus:ring-1 focus:ring-red-400"
+                  title="Clear Key Path and Passphrase"
+                  >
+                  Clear
+                  </button>
+                </div>
+                </div>
+
+                {/* SSH Key Passphrase for cloning */}
+                
+                <div>
+                <label
+                  htmlFor="clone_ssh_key_passphrase"
+                  className="block text-sm text-gray-400"
+                >
+                  SSH Key Passphrase (optional, for cloning key)
+                </label>
+                <input
+                  id="clone_ssh_key_passphrase"
+                  type="password"
+                  name="git_ssh_passphrase"
+                  value={formData.git_ssh_passphrase || ""}
+                  onChange={handleChange}
+                  className="w-full mt-1 px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="Enter passphrase if key is encrypted"
+                />
+                </div>
+                <div>
+                <label
+                  htmlFor="ssh_host_key"
+                  className="block text-sm text-gray-400"
+                >
+                  SSH Host key
+                </label>
+                <input
+                  id="git_ssh_host_key"
+                  type="text"
+                  name="git_ssh_host_key"
+                  value={formData.git_ssh_host_key || ""}
+                  onChange={handleChange}
+                  className="w-full mt-1 px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="(e.g., from `ssh-keyscan your-git-host.com`)"
+                />
+                </div>
+              </div>
+              )}
+            </div>
+            <div className="mb-6 border border-gray-700 p-4 rounded-lg">
+              <label className="flex items-center space-x-2 mb-3 cursor-pointer">
                 <input
                   type="checkbox"
                   name="SSH_for_deploy"
@@ -261,7 +350,6 @@ const EditConfigModal: React.FC<EditConfigModalProps> = ({
                 </div>
               )}
             </div>
-  
             <div className="flex justify-end space-x-3">
               <button
                 type="button"

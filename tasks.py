@@ -3,6 +3,7 @@ import subprocess
 from datetime import datetime, timezone
 import traceback
 import re
+import tempfile
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,8 @@ from models.repo_model import RepoConfig
 from models.pipeline_test_model import PipelineRuns, PipelineStatusEnum
 from db import SessionLocal
 from celery import Celery
+
+from helper.data import decrypt_data
 
 app = Celery(
     "tasks",
@@ -28,11 +31,18 @@ def save_logs_to_file(run_id: int, logs: str):
         print(f"Failed to save logs for run {run_id}: {e}")
 
 
-def run_command(command: list[str], working_dir: str | None = None) -> bool:
+def run_command(
+    command: list[str],
+    working_dir: str | None = None,
+    env: dict | None = None
+) -> tuple[bool, str]:
     command_output = ""
     command_output += f"Running command {' '.join(command)}"
     command_output += f" in directory: {working_dir if working_dir else ''}\n"
     success = True
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
 
     try:
         result = subprocess.run(
@@ -40,7 +50,8 @@ def run_command(command: list[str], working_dir: str | None = None) -> bool:
             capture_output=True,
             text=True,
             check=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            env=process_env
         )
         stdout_log = result.stdout.strip()
         stderr_log = result.stderr.strip()
@@ -76,6 +87,182 @@ def run_command(command: list[str], working_dir: str | None = None) -> bool:
         success = False
     print(f"Command {'succeeded' if success else 'failed'}.")
     return success, command_output.strip()
+
+
+def find_pipeline_file(repo_dir: str) -> tuple[str | None, str | None]:
+    """
+    Finds dockerfile or docker-compose file in the given repository dir.
+    Returns a tuple of (path, type), where type is either "dockerfile" or "compose".
+    """
+    compose_names = ["docker-compose.yml", "docker-compose.yaml"]
+    for name in compose_names:
+        compose_path = os.path.join(repo_dir, name)
+        if os.path.isfile(compose_path):
+            print(f"Found docker-compose file: {compose_path}")
+            return compose_path, "compose"
+
+    dockerfile_names = [
+        "Dockerfile", "dockerfile", "Dockerfile.dev",
+        "Dockerfile.prod", "Dockerfile.test"
+    ]
+    for name in dockerfile_names:
+        dockerfile_path = os.path.join(repo_dir, name)
+        if os.path.isfile(dockerfile_path):
+            print(f"Found Dockerfile: {dockerfile_path}")
+            return dockerfile_path, "dockerfile"
+
+    print(f"No Dockerfile or docker-compose.yml found in {repo_dir}")
+    return None, None
+
+
+def build_push_compose_services(
+    repo_dir: str,
+    compose_file_path: str,
+    username: str,
+    base_image_name: str,
+    commit_sha: str,
+    build_date: str,
+    main_branch: str
+) -> tuple[bool, str]:
+    all_logs = ""
+    all_logs += f"Starting Docker Compose build for {compose_file_path}\n"
+
+    with open(compose_file_path, "r") as f:
+        compose_content = f.read()
+    if not is_compose_file_safe(compose_content):
+        all_logs += "Docker Compose file is not safe\n"
+        return False, all_logs
+
+    success, build_log = run_command(
+        ["docker-compose", "-f", compose_file_path, "build"],
+        working_dir=repo_dir
+    )
+    all_logs += "\n--- Docker Compose Build Logs ---\n" + build_log
+    if not success:
+        all_logs += "Error: Docker Compose build failed.\n"
+        return False, all_logs
+    all_logs += "Docker Compose build completed successfully.\n"
+
+    # Ovde uzimam imena servisa iz compose fajla
+    try:
+        result = subprocess.run(
+            ["docker-compose", "-f", compose_file_path, "config", "--services"],
+            capture_output=True, text=True, check=True, cwd=repo_dir
+        )
+        services = [s.strip() for s in result.stdout.splitlines() if s.strip()]
+
+    except Exception as e:
+        all_logs += f"\nError getting services from docker-compose: {e}"
+        return False, all_logs
+
+    all_logs += f"Found services: {', '.join(services)}\n"
+
+    build_env = os.environ.copy()
+    build_env["DOCKER_USERNAME"] = username
+
+    default_tag = f"{main_branch}-{commit_sha[:7]}"
+    build_env["IMAGE_TAG"] = default_tag
+
+    all_logs += f"Using DOCKER_USERNAME={username} and IMAGE_TAG={default_tag}"
+    all_logs += "(can be overridden by compose file)\n"
+
+    success, build_log = run_command(
+        ["docker-compose", "-f", compose_file_path, "build"],
+        working_dir=repo_dir,
+        env=build_env
+    )
+    all_logs += "\n--- Docker Compose Build Logs ---\n" + build_log
+
+    if not success:
+        all_logs += "\nError: Docker Compose build failed.\n"
+        return False, all_logs
+
+    all_logs += "\nDocker Compose build successful.\n"
+
+    try:
+        result = subprocess.run(
+            ["docker-compose", "-f", compose_file_path, "config", "--images"],
+            capture_output=True, text=True, check=True, cwd=repo_dir, env=build_env
+        )
+        image_names_from_compose = [
+            img.strip() for img in result.stdout.splitlines()
+            if img.strip()
+        ]
+        all_logs += "\nImages listed by 'docker-compose config --images':"
+        all_logs += f" {', '.join(image_names_from_compose)}\n"
+    except Exception as e:
+        all_logs += "\nError getting image names from"
+        all_logs += f" 'docker-compose config --images': {e}\n"
+        all_logs += "This might happen if services do not have an"
+        all_logs += "'image' or 'build' directive properly set.\n"
+        return False, all_logs
+    if not image_names_from_compose:
+        all_logs += "\nNo images found by 'docker-compose config --images'"
+        all_logs += ". Nothing to push.\n"
+        return True, all_logs
+
+    all_logs += "\nAttempting to push images using 'docker-compose push'...\n"
+    all_logs += "This relies on 'image:' directives in the compose file being correctly"
+    all_logs += "formatted for a remote registry (e.g., 'username/imagename:tag').\n"
+
+    success_push_all, push_all_log = run_command(
+        ["docker-compose", "-f", compose_file_path, "push"],
+        working_dir=repo_dir,
+        env=build_env
+    )
+    all_logs += "\n--- Docker Compose Push All Logs ---\n" + push_all_log
+    if not success_push_all:
+        all_logs += "\nWarning: 'docker-compose push' (all services) reported an issue.\n"
+        all_logs += "Please ensure image: directives in your docker-compose.yml are like"
+        all_logs += "'${DOCKER_USERNAME}/myimage:${IMAGE_TAG}' and that you are logged"
+        all_logs += "into the Docker registry.\n"
+        return False, all_logs
+    all_logs += "\nManually tagging and pushing images if necessary...\n"
+    # push_failed_for_some = False
+    # for image_name in image_names_from_compose:
+    #     # npr: image_name moze biti "myproject" ili "myuser/myproject:latest"
+    #     # Treba da osiguramo da je tagovano za pravog korisnika i sa pravim tagom
+    #     target_image_name = ""
+    #     image_parts = image_name.split('/')
+    #     image_tag_parts = image_parts[-1].split(':')
+    #     base_img_name_from_compose = image_tag_parts[0]
+    #
+    #     if len(image_parts) > 1 and image_parts[0] == username:
+    #
+    #         target_image_name = f"{username}/{base_img_name_from_compose}:{default_tag}"
+    #     else:
+    #         # Nema username, ili je pogresan, npr. imagename:tag or imagename
+    #         # Koristi username iz CI konfiguracije.
+    #         # base_image_name_from_compose je samo 'imagename' deo
+    #         target_image_name = f"{username}/{base_img_name_from_compose}:{default_tag}"
+    #
+    #     if image_name != target_image_name:
+    #         all_logs += f"Tagging '{image_name}' as '{target_image_name}'\n"
+    #         tag_success, tag_log = run_command(
+    #               ["docker", "tag", image_name, target_image_name]
+    #         )
+    #         all_logs += tag_log + "\n"
+    #         if not tag_success:
+    #           all_logs += f"Error tagging {image_name}. Skipping push for this image.\n"
+    #             push_failed_for_some = True
+    #             continue
+    #     else:
+    #         all_logs += f"Image '{image_name}' is already correctly"
+    #         all_logs += "named/tagged for push.\n"
+    #         target_image_name = image_name
+    #
+    #     all_logs += f"Pushing {target_image_name}...\n"
+    #     push_success, individual_push_log = run_command(
+    #           ["docker", "push", target_image_name]
+    #      )
+    #     all_logs += individual_push_log + "\n"
+    #     if not push_success:
+    #         all_logs += f"Error pushing {target_image_name}.\n"
+    #         push_failed_for_some = True
+    #
+    # if push_failed_for_some:
+    #     all_logs += "\nError: One or more images failed to push.\n"
+    #     return False, all_logs #
 
 
 def update_pipeline_status(
@@ -173,6 +360,13 @@ def handle_git_update(
         f"Code for repo {repo_url} on branch {main_branch}",
         f" is updated in {repo_path}"
     )
+    return True
+
+
+def is_compose_file_safe(compose_content: str) -> bool:
+    if 'privileged: true' in compose_content:
+        print("Warning: docker-compose file contains 'privileged: true'")
+        return False
     return True
 
 
@@ -302,6 +496,7 @@ def process_push(
     pipeline_id = None
     status_log = initial_logs
     WORKSPACE_DIR = "ci_workspace"
+    ssh_key_path = None
 
     try:
         config = (
@@ -344,12 +539,55 @@ def process_push(
                 # save_logs_to_file(pipeline_id, status_log)
                 db_task.close()
                 return
+
+        git_command_env = os.environ.copy()
+        actual_repo_url = config.repo_url
+
+        if config.use_ssh_for_clone and config.git_ssh_private_key_encrypted:
+            status_log += "\nAttempting to use SSH for cloning...\n"
+            try:
+                private_key = decrypt_data(config.git_ssh_private_key_encrypted)
+
+                if actual_repo_url.startswith("https://"):
+                    actual_repo_url = actual_repo_url.replace(
+                        "https://",
+                        "git@"
+                    ).replace(
+                        "/",
+                        ":",
+                        1
+                    )
+                    if not actual_repo_url.endswith(".git"):
+                        actual_repo_url += ".git"
+                    status_log += f"\nConverted repo URL to SSH format: {actual_repo_url}"
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    mode='w',
+                    prefix='ssh_key_'
+                ) as tmp_key_file:
+                    os.chmod(tmp_key_file.name, 0o600)
+                    tmp_key_file.write(private_key)
+                    ssh_key_path = tmp_key_file.name
+
+                git_command_env["GIT_SSH_COMMAND"] = (
+                    f"ssh -i {ssh_key_path} "
+                    "-o IdentitiesOnly=yes "
+                    "-o StrictHostKeyChecking=no "
+                    "-o UserKnownHostsFile=/dev/null"
+                )
+                status_log += f"\nUsing temporary SSH key: {ssh_key_path}"
+            except Exception as e:
+                status_log += f"\nError setting up SSH key: {e}."
+                status_log += "Falling back to default git auth.\n"
+
         git_success_flag = True
         git_log_output = ""
         if os.path.exists(repo_path_celery):
             success_checkout, log_checkout = run_command(
                 ["git", "checkout", main_branch],
-                working_dir=repo_path_celery
+                working_dir=repo_path_celery,
+                env=git_command_env
             )
             git_log_output += log_checkout + "\n"
             if not success_checkout:
@@ -357,14 +595,23 @@ def process_push(
             else:
                 success_pull, log_pull = run_command(
                     ["git", "pull", "origin", main_branch],
-                    working_dir=repo_path_celery
+                    working_dir=repo_path_celery,
+                    env=git_command_env
                 )
                 git_log_output += log_pull
                 if not success_pull:
                     git_success_flag = False
         else:
             success_clone, log_clone = run_command(
-                ["git", "clone", "--branch", main_branch, repo_url, repo_path_celery]
+                [
+                    "git",
+                    "clone",
+                    "--branch",
+                    main_branch,
+                    actual_repo_url,
+                    repo_path_celery
+                ],
+                env=git_command_env
             )
             git_log_output += log_clone
             if not success_clone:
@@ -387,8 +634,17 @@ def process_push(
             PipelineStatusEnum.RUNNING_DOCKER_BUILD,
             "Git operations successful. Starting Docker build..."
         )
-        image_name = f"ci-image-{main_branch}-{pipeline_id}"
-        container_name = f"ci-container-{main_branch}-{pipeline_id}"
+        pipeline_file_path, pipeline_file_type = find_pipeline_file(repo_path_celery)
+        if not pipeline_file_path:
+            status_log += "No dockerfile or dockercompose file found in the repository.\n"
+            update_pipeline_status(
+                db_task,
+                pipeline_id,
+                PipelineStatusEnum.FAILED_DOCKER_BUILD,
+                status_log
+            )
+            db_task.close()
+            return
         all_deploy_logs = ""
         build_date = datetime.utcnow().isoformat()
         try:
@@ -398,44 +654,75 @@ def process_push(
         except Exception:
             commit_sha_short = "Unknown"
 
-        all_deploy_logs += f"Starting Build and Deploy for {image_name}\n"
-        all_deploy_logs += f"Commit: {commit_sha_short}\nBuild date: {build_date}\n"
-        dockerfile_loc = find_dockerfile(repo_path_celery)
-        if dockerfile_loc is None:
-            all_deploy_logs += "Docker image not found\n"
+        current_docker_username = config.docker_username
+        if not current_docker_username:
+            error_msg = "Docker username not configured for this repository."
+            status_log += f"\n{error_msg}\n"
             update_pipeline_status(
                 db_task,
                 pipeline_id,
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
-                status_log + "\n" + all_deploy_logs
+                error_msg
             )
-            db_task.close()
             return
-        all_deploy_logs += f"Docker image found at {dockerfile_loc}\n"
-        with open(dockerfile_loc, "r") as f:
-            dockerfile_content = f.read()
 
-        if not is_dockerfile_safe(dockerfile_content):
-            all_deploy_logs += "Docker image is not safe\n"
+        if (pipeline_file_type == "dockerfile"):
+            all_deploy_logs += f"Docker image found at {pipeline_file_path}\n"
+            try:
+                with open(pipeline_file_path, "r", encoding="UTF-8") as f:
+                    dockerfile_content = f.read()
+            except Exception as e:
+                error_msg = f"Error reading Dockerfile {pipeline_file_path}: {e}"
+                status_log += f"\n{error_msg}\n"
+                update_pipeline_status(
+                    db_task,
+                    pipeline_id,
+                    PipelineStatusEnum.FAILED_DOCKER_BUILD,
+                    error_msg
+                )
+                return
+            if not is_dockerfile_safe(dockerfile_content):
+                all_deploy_logs += "Dockerfile is not safe\n"
+                update_pipeline_status(
+                    db_task,
+                    pipeline_id,
+                    PipelineStatusEnum.FAILED_DOCKER_BUILD,
+                    status_log + "\n" + all_deploy_logs
+                )
+                return
+            all_deploy_logs += "Dockerfile is safe...\n"
+            repo_name_part = config.repo_url.split('/')[-1].replace('.git', '')
+            safe_branch_name = main_branch.replace('/', '-')
+            generated_image_name = f"ci-{repo_name_part}-{safe_branch_name}-"
+            generated_image_name += f"{config_id}-{commit_sha_short}"
+            generated_container_name = f"ci-container-{config_id}-{commit_sha_short}"
+            all_deploy_logs += "Generated image name:"
+            all_deploy_logs += f" {current_docker_username}/{generated_image_name}\n"
+            build_success, build_log_output = build_deploy_docker(
+                repo_dir=repo_path_celery,
+                image_name=generated_image_name,
+                container_name=generated_container_name,
+                username=docker_username
+            )
+            all_deploy_logs += build_log_output
+        elif (pipeline_file_type == "compose"):
             update_pipeline_status(
                 db_task,
                 pipeline_id,
-                PipelineStatusEnum.FAILED_DOCKER_BUILD,
-                status_log + "\n" + all_deploy_logs
+                PipelineStatusEnum.RUNNING_DOCKER_BUILD,
+                "Starting Docker Compose operations..."
             )
-            db_task.close()
-            return
-        all_deploy_logs += "Docker image is safe...\n"
-        build_success, build_log_output = build_deploy_docker(
-            repo_dir=repo_path_celery,
-            image_name=image_name,
-            container_name=container_name,
-            username=docker_username
-        )
+            build_success, compose_log_output = build_push_compose_services(
+                repo_dir=repo_path_celery,
+                compose_file_path=pipeline_file_path,
+                username=current_docker_username,
+                commit_sha=commit_sha_short,
+                build_date=build_date,
+                main_branch=main_branch
+            )
+            all_deploy_logs += compose_log_output
 
-        all_deploy_logs += build_log_output
-
-        status_log += "\n--- Docker Build Logs ---\n" + all_deploy_logs
+        status_log += "\n--- Docker Operations Logs ---\n" + all_deploy_logs
 
         if not build_success:
             update_pipeline_status(
@@ -444,8 +731,8 @@ def process_push(
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
                 status_log
             )
-            db_task.close()
             return
+
         status_log += "\nSkipped deploy due to security reasons (in Celery task).\n"
         update_pipeline_status(
             db_task,
@@ -453,6 +740,8 @@ def process_push(
             PipelineStatusEnum.SUCCESS,
             "Pipeline finished successfully."
         )
+        # TODO Implementirati notifikacije korisniku o uspehu
+
     except Exception as e:
         tb_str = traceback.format_exc()
         error_message = (
@@ -470,6 +759,9 @@ def process_push(
             )
             # save_logs_to_file(pipeline_id, status_log)
     finally:
+        if ssh_key_path and os.path.exists(ssh_key_path):
+            os.remove(ssh_key_path)
+            print(f"Removed temporary SSH key: {ssh_key_path}")
         if pipeline_id:
             final_run = (
                 db_task.query(PipelineRuns).

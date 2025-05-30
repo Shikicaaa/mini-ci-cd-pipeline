@@ -47,11 +47,6 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - DATABASE_URL=${DATABASE_URL}
-      - GITHUB_APP_WEBHOOK_SECRET=${GITHUB_APP_WEBHOOK_SECRET}
-      - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
-      - ORIGINS=${ORIGINS}
     depends_on:
       db:
         condition: service_healthy
@@ -67,10 +62,6 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - DATABASE_URL=${DATABASE_URL}
-      - GITHUB_APP_WEBHOOK_SECRET=${GITHUB_APP_WEBHOOK_SECRET}
-      - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
     depends_on:
       db:
         condition: service_healthy

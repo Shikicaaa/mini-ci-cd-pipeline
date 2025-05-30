@@ -1,10 +1,19 @@
 from sqlalchemy import (
     Column, Integer, String,
     ForeignKey, Table, Boolean,
-    BigInteger
+    BigInteger, Enum as SQLAlchemyEnum
 )
+import enum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from .base import Base
+
+
+class GitHostPlatform(enum.Enum):
+    GITHUB = "github"
+    GITLAB = "gitlab"
+    BITBUCKET = "bitbucket"
+    GENERIC = "generic"
+
 
 repo_user = Table(
     "repo_user",
@@ -27,13 +36,39 @@ class RepoConfig(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     repo_url: Mapped[str] = mapped_column(String)
     main_branch: Mapped[str] = mapped_column(String)
+    platform: Mapped[GitHostPlatform] = mapped_column(
+        SQLAlchemyEnum(
+            GitHostPlatform,
+            native_enum=False,
+            values_callable=lambda enum: [e.value for e in enum]
+        ),
+        default=GitHostPlatform.GITHUB
+    )
+
+    # Docker info
     docker_username: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Installation info
     installation_id: Mapped[BigInteger] = mapped_column(BigInteger, nullable=True)
-    SSH_host: Mapped[str] = mapped_column(String, nullable=True)
-    SSH_port: Mapped[int] = mapped_column(Integer, nullable=True)
-    SSH_username: Mapped[str] = mapped_column(String, nullable=True)
-    SSH_key_path: Mapped[str] = mapped_column(String, nullable=True)
-    SSH_key_passphrase: Mapped[str] = mapped_column(String, nullable=True)
+
+    # SSH for cloning configuration
+    use_ssh_for_clone: Mapped[bool] = mapped_column(Boolean, default=False)
+    git_ssh_private_key_encrypted: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True
+    )
+    git_ssh_key_passphrase_encrypted: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True
+    )
+    git_ssh_host_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # SSH  for deploy configuration
+    SSH_host: Mapped[str | None] = mapped_column(String, nullable=True)
+    SSH_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    SSH_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    SSH_key_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    SSH_key_passphrase: Mapped[str | None] = mapped_column(String, nullable=True)
     SSH_for_deploy: Mapped[bool] = mapped_column(Boolean)
 
     webhooks = relationship("Webhook", back_populates="repo_config")

@@ -22,7 +22,7 @@ async def set_docker(
     else:
         config = db.query(RepoConfig).filter(
             RepoConfig.users.any(id=user.id),
-            RepoConfig.repo_url == config.specific_repo
+            RepoConfig.repo_url == docker_config.specific_repo
         ).first()
         if config:
             updated += 1
