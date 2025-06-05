@@ -16,6 +16,7 @@ from api.api_main import router as main_router
 from api.api_config import router as config_router
 from api.api_pipeline import router as pipeline_router
 from api.api_docker import router as docker_router
+from server_events.sse import router as sse_router
 
 from api.api_users import get_db
 from models.repo_model import RepoConfig
@@ -52,6 +53,7 @@ webhook_app.include_router(main_router, tags=["Main"])
 webhook_app.include_router(docker_router, tags=["Docker"])
 webhook_app.include_router(pipeline_router, tags=["Pipeline"])
 webhook_app.include_router(config_router, tags=["RepoConfig", "Config"])
+webhook_app.include_router(sse_router, prefix="/sse", tags=["SSE"])
 
 ORIGINS = os.getenv("ORIGINS")
 
@@ -134,7 +136,6 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
     scheme, signature = signature_header.split("=", 1)
     if scheme != "sha256":
         raise HTTPException(status_code=400, detail="Unsupported signature scheme")
-    print(signature_header)
 
     try:
         payload_bytes = await request.body()
@@ -151,7 +152,6 @@ async def receive_webhook(request: Request, db=Depends(get_db)):
             raise HTTPException(status_code=403, detail="Invalid signature")
 
         print("Received payload:")
-
         event_type = request.headers.get("X-GitHub-Event")
         if event_type == "push":
             pushed_ref = payload_json.get("ref")

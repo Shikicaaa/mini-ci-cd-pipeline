@@ -5,6 +5,9 @@ import HomePage from './components/HomePage';
 import { AuthProvider } from './auth/AuthContext';
 import Dashboard from './pages/Dashboard';
 import ThankYouForm from './components/ThankYouForm';
+import NotificationCenter from './components/NotificationCenter';
+import './index.css'
+import './App.css'
 
 
 const App = () => {
@@ -20,6 +23,7 @@ const App = () => {
           <Route path="/thank-you" element={<ThankYouForm />}/>
         </Routes>
       </Router>
+      <NotificationCenter />
     </AuthProvider>
   );
 };

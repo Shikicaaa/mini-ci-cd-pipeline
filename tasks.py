@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import traceback
 import re
 import tempfile
+import redis
+import json
 
 from sqlalchemy.orm import Session
 
@@ -16,9 +18,19 @@ from helper.data import decrypt_data
 
 app = Celery(
     "tasks",
-    broker=os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"),
-    backend=os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
+    broker=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    backend=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 )
+
+redis_host = os.getenv('REDIS_HOST')
+
+try:
+    redis_client = redis.from_url(redis_host, decode_responses=True)
+    redis_client.ping()
+    print("Super")
+except redis.ConnectionError as e:
+    print(f"Redis connection error: {e}")
+    redis_client = None
 
 
 def save_logs_to_file(run_id: int, logs: str):
@@ -87,6 +99,25 @@ def run_command(
         success = False
     print(f"Command {'succeeded' if success else 'failed'}.")
     return success, command_output.strip()
+
+
+def send_redis_message(
+    channel: str,
+    message: dict,
+) -> bool:
+    if not redis_client:
+        print("Redis client not initialized, cannot send message.")
+        return False
+    try:
+        redis_client.publish(
+            channel,
+            json.dumps(message, ensure_ascii=False)
+        )
+        print(f"Message sent to Redis channel '{channel}': {message}")
+        return True
+    except Exception as e:
+        print(f"Error sending message to Redis channel '{channel}': {e}")
+        return False
 
 
 def find_pipeline_file(repo_dir: str) -> tuple[str | None, str | None]:
@@ -524,6 +555,11 @@ def process_push(
             PipelineStatusEnum.RUNNING_GIT,
             "Starting Git operations..."
         )
+        message = {
+            "config_id": config_id,
+            "pipeline_id": pipeline_id,
+            "status": "",
+        }
         repo_path_celery = os.path.join(WORKSPACE_DIR, str(config_id))
         if not os.path.exists(WORKSPACE_DIR):
             try:
@@ -625,6 +661,8 @@ def process_push(
                 PipelineStatusEnum.FAILED_GIT,
                 status_log
             )
+            message["status"] = "Failed Git, see logs for more..."
+            send_redis_message(f"pipeline-update-{config_id}", message)
             # save_logs_to_file(pipeline_id, status_log)
             db_task.close()
             return
@@ -643,6 +681,10 @@ def process_push(
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
                 status_log
             )
+            message["status"] = "Failed during docker build phase. "
+            message["status"] += "No dockerfile or docker compose found in the repo."
+
+            send_redis_message(f"pipeline-update-{config_id}", message)
             db_task.close()
             return
         all_deploy_logs = ""
@@ -664,6 +706,9 @@ def process_push(
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
                 error_msg
             )
+            message["status"] = "Failed during docker build phase. "
+            message["status"] += "Docker username not configured for this repo."
+            send_redis_message(f"pipeline-update-{config_id}", message)
             return
 
         if (pipeline_file_type == "dockerfile"):
@@ -680,6 +725,10 @@ def process_push(
                     PipelineStatusEnum.FAILED_DOCKER_BUILD,
                     error_msg
                 )
+                message["status"] = "Failed during docker build phase. "
+                message["status"] += f"Error reading dockerfile in {pipeline_file_path}."
+                message["status"] += " Check if the file really inside that path."
+                send_redis_message(f"pipeline-update-{config_id}", message)
                 return
             if not is_dockerfile_safe(dockerfile_content):
                 all_deploy_logs += "Dockerfile is not safe\n"
@@ -689,6 +738,10 @@ def process_push(
                     PipelineStatusEnum.FAILED_DOCKER_BUILD,
                     status_log + "\n" + all_deploy_logs
                 )
+                message["status"] = "Failed during docker build phase. "
+                message["status"] += "Dockerfile is not safe. "
+                message["status"] += "Check if the file contains harmful commands."
+                send_redis_message(f"pipeline-update-{config_id}", message)
                 return
             all_deploy_logs += "Dockerfile is safe...\n"
             repo_name_part = config.repo_url.split('/')[-1].replace('.git', '')
@@ -731,6 +784,9 @@ def process_push(
                 PipelineStatusEnum.FAILED_DOCKER_BUILD,
                 status_log
             )
+            message["status"] = "Failed during docker build phase. "
+            message["status"] += "Check the logs for errors."
+            send_redis_message(f"pipeline-update-{config_id}", message)
             return
 
         status_log += "\nSkipped deploy due to security reasons (in Celery task).\n"
@@ -740,7 +796,8 @@ def process_push(
             PipelineStatusEnum.SUCCESS,
             "Pipeline finished successfully."
         )
-        # TODO Implementirati notifikacije korisniku o uspehu
+        message["status"] = "Success!"
+        send_redis_message(f"pipeline-update-{config_id}", message)
 
     except Exception as e:
         tb_str = traceback.format_exc()
@@ -757,6 +814,8 @@ def process_push(
                 PipelineStatusEnum.UNKNOWN,
                 status_log
             )
+            message["status"] = "Unknown error has occured. Check logs."
+            send_redis_message(f"pipeline-update-{config_id}", message)
             # save_logs_to_file(pipeline_id, status_log)
     finally:
         if ssh_key_path and os.path.exists(ssh_key_path):
