@@ -13,7 +13,7 @@ class PipelineRuns(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     config_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("configs.id"),
+        ForeignKey("configs.id", ondelete="CASCADE"),
         nullable=False
     )
     config = relationship("RepoConfig", back_populates="pipeline_runs")

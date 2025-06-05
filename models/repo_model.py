@@ -80,7 +80,9 @@ class RepoConfig(Base):
     )
     pipeline_runs = relationship(
         "PipelineRuns",
-        back_populates="config"
+        back_populates="config",
+        cascade="all, delete-orphan",
+        passive_deletes=True
     )
 
 
