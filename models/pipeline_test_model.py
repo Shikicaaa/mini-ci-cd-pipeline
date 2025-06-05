@@ -37,6 +37,6 @@ class PipelineRuns(Base):
 
     def __repr__(self):
         return (
-            f"<PipelineRun(id={self.id}, config_id={self.config_id},",
+            f"<PipelineRun(id={self.id}, config_id={self.config_id}, "
             f"status='{self.status.name}')>"
         )
