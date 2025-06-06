@@ -52,7 +52,10 @@ async def update_config(
             detail="Not authenticated"
         )
 
-    config = db.query(RepoConfig).filter(config_id == RepoConfig.id).first()
+    config = db.query(RepoConfig).filter(
+        RepoConfig.id == config_id,
+        RepoConfig.users.any(id=user.id)
+    ).first()
 
     if not config:
         raise HTTPException(

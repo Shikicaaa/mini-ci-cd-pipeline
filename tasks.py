@@ -538,12 +538,12 @@ def process_push(
             print(f"Config ID: {config_id} not found in Celery Task!")
             return
         pipeline_run = PipelineRuns(
-            config_id=config_id,
             status=PipelineStatusEnum.PENDING,
             commit_sha=commit_sha,
             trigger_event_id=github_delivery_id,
             logs=status_log.strip()
         )
+        pipeline_run.config = config
         db_task.add(pipeline_run)
         db_task.commit()
         db_task.refresh(pipeline_run)

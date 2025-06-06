@@ -21,7 +21,7 @@ export default function NotificationCenter() {
     }, []);
 
     useEffect(() => {
-        const eventSource = new EventSource((import.meta.env.VITE_API_URL));
+        const eventSource = new EventSource((import.meta.env.VITE_SSE_URL));
 
         eventSource.onmessage = (event) => {
             try {
