@@ -25,8 +25,7 @@ async def get_redis_connection():
 
 @router.get(
     "/user/{user_id}",
-    response_class=EventSourceResponse,
-    media_type="text/event-stream"
+    response_class=EventSourceResponse
 )
 async def pipeline_events_sse(
     request: Request,
