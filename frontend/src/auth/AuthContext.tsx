@@ -39,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (payload && payload.sub) {
                 const currentTime = Math.floor(Date.now() / 1000);
                 if (payload.exp && payload.exp > currentTime) {
+                    console.log(payload);
                     setUsername(payload.sub);
                     setUser_id(payload.user_id ?? null);
 
