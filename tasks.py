@@ -555,11 +555,14 @@ def process_push(
             PipelineStatusEnum.RUNNING_GIT,
             "Starting Git operations..."
         )
+        user_id = config.users[0].id if config.users else None
         message = {
             "config_id": config_id,
             "pipeline_id": pipeline_id,
             "status": "",
+            "user_id": user_id,
         }
+        user_channel = f"user-notifications-{user_id}"
         repo_path_celery = os.path.join(WORKSPACE_DIR, str(config_id))
         if not os.path.exists(WORKSPACE_DIR):
             try:
@@ -662,7 +665,7 @@ def process_push(
                 status_log
             )
             message["status"] = "Failed Git, see logs for more..."
-            send_redis_message(f"pipeline-update-{config_id}", message)
+            send_redis_message(user_channel, message)
             # save_logs_to_file(pipeline_id, status_log)
             db_task.close()
             return
@@ -684,7 +687,7 @@ def process_push(
             message["status"] = "Failed during docker build phase. "
             message["status"] += "No dockerfile or docker compose found in the repo."
 
-            send_redis_message(f"pipeline-update-{config_id}", message)
+            send_redis_message(user_channel, message)
             db_task.close()
             return
         all_deploy_logs = ""
@@ -708,7 +711,7 @@ def process_push(
             )
             message["status"] = "Failed during docker build phase. "
             message["status"] += "Docker username not configured for this repo."
-            send_redis_message(f"pipeline-update-{config_id}", message)
+            send_redis_message(user_channel, message)
             return
 
         if (pipeline_file_type == "dockerfile"):
@@ -728,7 +731,7 @@ def process_push(
                 message["status"] = "Failed during docker build phase. "
                 message["status"] += f"Error reading dockerfile in {pipeline_file_path}."
                 message["status"] += " Check if the file really inside that path."
-                send_redis_message(f"pipeline-update-{config_id}", message)
+                send_redis_message(user_channel, message)
                 return
             if not is_dockerfile_safe(dockerfile_content):
                 all_deploy_logs += "Dockerfile is not safe\n"
@@ -741,7 +744,7 @@ def process_push(
                 message["status"] = "Failed during docker build phase. "
                 message["status"] += "Dockerfile is not safe. "
                 message["status"] += "Check if the file contains harmful commands."
-                send_redis_message(f"pipeline-update-{config_id}", message)
+                send_redis_message(user_channel, message)
                 return
             all_deploy_logs += "Dockerfile is safe...\n"
             repo_name_part = config.repo_url.split('/')[-1].replace('.git', '')
@@ -786,7 +789,7 @@ def process_push(
             )
             message["status"] = "Failed during docker build phase. "
             message["status"] += "Check the logs for errors."
-            send_redis_message(f"pipeline-update-{config_id}", message)
+            send_redis_message(user_channel, message)
             return
 
         status_log += "\nSkipped deploy due to security reasons (in Celery task).\n"
@@ -797,7 +800,7 @@ def process_push(
             "Pipeline finished successfully."
         )
         message["status"] = "Success!"
-        send_redis_message(f"pipeline-update-{config_id}", message)
+        send_redis_message(user_channel, message)
 
     except Exception as e:
         tb_str = traceback.format_exc()
@@ -815,7 +818,7 @@ def process_push(
                 status_log
             )
             message["status"] = "Unknown error has occured. Check logs."
-            send_redis_message(f"pipeline-update-{config_id}", message)
+            send_redis_message(user_channel, message)
             # save_logs_to_file(pipeline_id, status_log)
     finally:
         if ssh_key_path and os.path.exists(ssh_key_path):

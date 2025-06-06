@@ -107,7 +107,8 @@ def login(
             detail="Password is incorrect!"
         )
     token = create_token({
-        "sub": user.username
+        "sub": user.username,
+        "user_id": user.id
     })
     return {
         "access_token": token,

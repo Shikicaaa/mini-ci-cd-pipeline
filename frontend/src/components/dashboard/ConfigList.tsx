@@ -22,9 +22,11 @@ interface ConfigsListProps {
           const response = await api.get<Config[]>("/api/config");
           setConfigs(response.data);
         } catch (err) {
-          const error = err as AxiosError;
+          const error = err as AxiosError<any>;
           console.error(err)
-          if (error.response && error.response.data) {
+          if (error.response && error.response.data && error.response.data.detail) {
+              setError(error.response.data.detail);
+          } else if (error.response && error.response.data) {
               setError(error.response.data.toString());
           } else {
               setError('Unexpected error occurred');

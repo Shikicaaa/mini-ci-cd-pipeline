@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Notification from "./Notification";
+import { useAuth } from "../auth/AuthContext";
 
 interface UIMessage {
     id: string;
@@ -21,15 +22,19 @@ export default function NotificationCenter() {
     }, []);
 
     useEffect(() => {
-        const eventSource = new EventSource((import.meta.env.VITE_SSE_URL));
-
+        const { user_id } = useAuth();
+        if (!user_id) {
+            console.warn("User ID is not available, skipping SSE connection.");
+            return;
+        }
+        const eventSource = new EventSource(`${import.meta.env.VITE_SSE_URL}/user/${user_id}`);
         eventSource.onmessage = (event) => {
             try {
                 console.log("Received SSE:", event.data);
                 const data = JSON.parse(event.data);
                 addNotification(data);
             } catch (err) {
-                console.error("Greška u parsiranju SSE poruke:", err);
+                console.error("Error while parsing SSE message:", err);
             }
         };
 
