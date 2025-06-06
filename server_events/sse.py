@@ -17,7 +17,7 @@ async def get_redis_connection():
         await client.close()
 
 
-@router.get("/pipeline-update/user/{user_id}")
+@router.get("/user/{user_id}")
 async def pipeline_events_sse(
     request: Request,
     user_id: str,
