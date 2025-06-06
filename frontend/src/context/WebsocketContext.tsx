@@ -24,7 +24,8 @@ export const WebSocketProvider: React.FC<React.PropsWithChildren> = ({ children 
     const {user_id}= useAuth();
 
     useEffect(() => {
-        const wsUrl = `ws://localhost:8000/ws/notifications/${user_id}`;
+        const baseURL = (import.meta.env.VITE_WS_URL)
+        const wsUrl = baseURL + `/notifications/${user_id}`;
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => setIsConnected(true);
