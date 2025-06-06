@@ -14,11 +14,17 @@ export default function NotificationCenter() {
     const [notifications, setNotifications] = useState<UIMessage[]>([]);
 
     const addNotification = useCallback((data: Omit<UIMessage, 'id' | 'isLeaving'>) => {
+        console.log("Adding notification:", data);
         const newNotification: UIMessage = {
             ...data,
             id: crypto.randomUUID(),
         };
-        setNotifications((prev) => [...prev, newNotification]);
+        setNotifications((prev) => {
+            console.log("Current notifications before adding:", prev);
+            const updatedNotifications = [...prev, newNotification];
+            console.log("Notifications after adding:", updatedNotifications);
+            return updatedNotifications;
+        });
     }, []);
 
     const { user_id } = useAuth();
@@ -29,6 +35,9 @@ export default function NotificationCenter() {
         }
         console.info("Connecting to SSE for user:", user_id);
         const eventSource = new EventSource(`${import.meta.env.VITE_SSE_URL}/user/${user_id}`);
+        eventSource.onopen = () => {
+            console.log("SSE connection opened!");
+        };
         eventSource.onmessage = (event) => {
             try {
                 console.log("Received SSE:", event.data);
