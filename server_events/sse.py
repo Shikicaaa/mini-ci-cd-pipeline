@@ -3,6 +3,8 @@ from sse_starlette.sse import EventSourceResponse
 from models.pipeline_test_model import PipelineRuns
 
 from models.repo_model import RepoConfig
+from models.user_model import User
+
 import asyncio
 import redis.asyncio as aioredis
 from db import SessionLocal
@@ -40,7 +42,7 @@ async def pipeline_events_sse(
         try:
             latest_pipeline = db_session.query(PipelineRuns)\
                                   .join(RepoConfig)\
-                                  .filter(RepoConfig.user_id == user_id)\
+                                  .filter(RepoConfig.users.any(User.id == user_id))\
                                   .order_by(PipelineRuns.created_at.desc())\
                                   .first()
 
