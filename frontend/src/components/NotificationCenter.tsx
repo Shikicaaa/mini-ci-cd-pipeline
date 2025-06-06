@@ -59,7 +59,7 @@ export default function NotificationCenter() {
         setTimeout(() => {
             setNotifications((prev) => prev.filter((n) => n.id !== idToRemove));
         }, 500);
-    }, []);
+    }, [user_id, addNotification]);
 
     return (
         <div className="fixed bottom-4 left-4 flex flex-col-reverse gap-3 z-50 w-80">
