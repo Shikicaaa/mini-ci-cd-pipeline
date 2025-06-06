@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Request, Depends
 from sse_starlette.sse import EventSourceResponse
+from models.pipeline_test_model import PipelineRuns
+
+from models.repo_model import RepoConfig
 import asyncio
 import redis.asyncio as aioredis
+from db import SessionLocal
 import json
 import os
 
@@ -32,6 +36,35 @@ async def pipeline_events_sse(
         redis_channel = f"user-notifications-{user_id}"
         await pubsub.subscribe(redis_channel)
         print(f"Subscribed to channel: {redis_channel}")
+        db_session = SessionLocal()
+        try:
+            latest_pipeline = db_session.query(PipelineRuns)\
+                                  .join(RepoConfig)\
+                                  .filter(RepoConfig.user_id == user_id)\
+                                  .order_by(PipelineRuns.created_at.desc())\
+                                  .first()
+
+            if latest_pipeline:
+                initial_message = {
+                    "config_id": latest_pipeline.config_id,
+                    "pipeline_id": latest_pipeline.id,
+                    "status": latest_pipeline.status.value,
+                    "user_id": user_id,
+                }
+                yield {
+                    "event": "user_notification",
+                    "data": json.dumps(initial_message)
+                }
+                print(f"Sent status for pipeline {latest_pipeline.id} to user {user_id}")
+
+        except Exception as e:
+            print(f"Error sending initial status: {e}")
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": f"Failed to retrieve initial status: {e}"})
+            }
+        finally:
+            db_session.close()
 
         try:
             while True:
