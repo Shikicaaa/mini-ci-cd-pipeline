@@ -27,6 +27,7 @@ export default function NotificationCenter() {
             console.warn("User ID is not available, skipping SSE connection.");
             return;
         }
+        console.info("Connecting to SSE for user:", user_id);
         const eventSource = new EventSource(`${import.meta.env.VITE_SSE_URL}/user/${user_id}`);
         eventSource.onmessage = (event) => {
             try {
