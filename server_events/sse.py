@@ -29,7 +29,7 @@ async def pipeline_events_sse(
         local_redis = await aioredis.from_url(redis_url)
         pubsub = local_redis.pubsub()
 
-        redis_channel = f"pipeline-update-{user_id}"
+        redis_channel = f"user-notifications-{user_id}"
         await pubsub.subscribe(redis_channel)
         print(f"Subscribed to channel: {redis_channel}")
 
