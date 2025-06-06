@@ -14,15 +14,15 @@ export default function NotificationCenter() {
     const [notifications, setNotifications] = useState<UIMessage[]>([]);
 
     const addNotification = useCallback((data: Omit<UIMessage, 'id' | 'isLeaving'>) => {
-        console.log("Adding notification:", data);
+        console.log("--> addNotification: Called with data:", data); // A
         const newNotification: UIMessage = {
             ...data,
             id: crypto.randomUUID(),
         };
         setNotifications((prev) => {
-            console.log("Current notifications before adding:", prev);
+            console.log("--> addNotification: Current notifications BEFORE update:", prev); // B
             const updatedNotifications = [...prev, newNotification];
-            console.log("Notifications after adding:", updatedNotifications);
+            console.log("--> addNotification: Notifications AFTER update:", updatedNotifications); // C
             return updatedNotifications;
         });
     }, []);
@@ -30,35 +30,42 @@ export default function NotificationCenter() {
     const { user_id } = useAuth();
     useEffect(() => {
         if (!user_id) {
-            console.warn("User ID is not available, skipping SSE connection.");
+            console.warn("--- useEffect: User ID is not available, skipping SSE connection.");
             return;
         }
-        console.info("Connecting to SSE for user:", user_id);
+        console.info("--- useEffect: Connecting to SSE for user:", user_id);
         const eventSource = new EventSource(`${import.meta.env.VITE_SSE_URL}/user/${user_id}`);
+
         eventSource.onopen = () => {
-            console.log("SSE connection opened!");
+            console.log("--- SSE Event: Connection opened!"); // D
         };
+
         eventSource.onmessage = (event) => {
+            console.log("--- SSE Event: onmessage TRIGGERED!"); // E - KRITIČAN LOG!
             try {
-                console.log("Received SSE:", event.data);
+                console.log("--- SSE Event: Received RAW event object:", event); // F
+                console.log("--- SSE Event: Received RAW data (event.data):", event.data); // G
                 const data = JSON.parse(event.data);
+                console.log("--- SSE Event: Parsed data (object):", data); // H
                 addNotification(data);
             } catch (err) {
-                console.error("Error while parsing SSE message:", err);
+                console.error("--- SSE Event: ERROR parsing SSE message:", err, "Raw data:", event.data); // I
             }
         };
 
         eventSource.onerror = (error) => {
-            console.error("SSE Error:", error);
+            console.error("--- SSE Event: An ERROR occurred with SSE:", error); // J
             eventSource.close();
         };
 
         return () => {
+            console.log("--- useEffect: Cleaning up - Closing SSE connection for user:", user_id); // K
             eventSource.close();
         };
     }, [user_id, addNotification]);
 
     const removeNotificationCallback = useCallback((idToRemove: string) => {
+        console.log("--- removeNotification: Attempting to remove ID:", idToRemove); // L
         setNotifications((prev) =>
             prev.map((n) =>
                 n.id === idToRemove ? { ...n, isLeaving: true } : n
@@ -66,12 +73,17 @@ export default function NotificationCenter() {
         );
 
         setTimeout(() => {
-            setNotifications((prev) => prev.filter((n) => n.id !== idToRemove));
+            setNotifications((prev) => {
+                const filtered = prev.filter((n) => n.id !== idToRemove);
+                console.log("--- removeNotification: Notifications AFTER filter:", filtered); // M
+                return filtered;
+            });
         }, 500);
     }, []);
 
     return (
         <div className="fixed bottom-4 left-4 flex flex-col-reverse gap-3 z-50 w-80">
+            
             {notifications.map((msg) => (
                 <Notification
                     key={msg.id}
