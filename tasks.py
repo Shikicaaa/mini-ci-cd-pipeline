@@ -109,12 +109,9 @@ def send_redis_message(
         print("Redis client not initialized, cannot send message.")
         return False
     try:
-        redis_client.publish(
-            channel,
-            json.dumps(message, ensure_ascii=False).encode('utf-8')
-        )
-        print(f"Message sent to Redis channel '{channel}': {message}")
-        return True
+        payload = json.dumps(message)
+        redis_client.publish(channel, payload)
+        print(f"Message sent to Redis channel '{channel}': {payload}")
     except Exception as e:
         print(f"Error sending message to Redis channel '{channel}': {e}")
         return False

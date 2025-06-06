@@ -7,7 +7,13 @@ from cryptography.fernet import Fernet
 import time
 import logging
 
-from fastapi import FastAPI, HTTPException, Request, status, Depends
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+    status,
+    Depends,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
@@ -16,7 +22,7 @@ from api.api_main import router as main_router
 from api.api_config import router as config_router
 from api.api_pipeline import router as pipeline_router
 from api.api_docker import router as docker_router
-from server_events.sse import router as sse_router
+from notifications.websocket import router as websocket_router
 
 from api.api_users import get_db
 from models.repo_model import RepoConfig
@@ -53,7 +59,7 @@ webhook_app.include_router(main_router, tags=["Main"])
 webhook_app.include_router(docker_router, tags=["Docker"])
 webhook_app.include_router(pipeline_router, tags=["Pipeline"])
 webhook_app.include_router(config_router, tags=["RepoConfig", "Config"])
-webhook_app.include_router(sse_router, prefix="/sse", tags=["SSE"])
+webhook_app.include_router(websocket_router, prefix="/ws", tags=["ws"])
 
 ORIGINS = os.getenv("ORIGINS")
 

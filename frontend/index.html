@@ -7,42 +7,6 @@
     <title>Mini CI-CD Pipeline</title>
   </head>
   <body>
-    <script type="module">
-        // TEMPORARY SSE TEST SCRIPT - REMOVE AFTER DEBUGGING
-        document.addEventListener('DOMContentLoaded', () => {
-            const userId = 1; // HARDKODIRAJ user_id za test
-            const sseUrl = `https://shikicaaa.duckdns.org/sse/user/${userId}`; // HARDKODIRAJ URL
-
-            console.log("--- GLOBAL TEST: Attempting to connect to SSE at:", sseUrl);
-
-            const testEventSource = new EventSource(sseUrl);
-
-            testEventSource.onopen = (event) => {
-                console.log("--- GLOBAL TEST: SSE Connection Opened!", event);
-            };
-
-            testEventSource.onmessage = (event) => {
-                console.log("--- GLOBAL TEST: Message Received!", event);
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log("--- GLOBAL TEST: Parsed Data:", data);
-                } catch (e) {
-                    console.error("--- GLOBAL TEST: Error parsing data:", e, event.data);
-                }
-            };
-
-            testEventSource.onerror = (error) => {
-                console.error("--- GLOBAL TEST: Error occurred!", error);
-                testEventSource.close();
-            };
-
-            // Keep connection open for a while, then close if needed
-            // setTimeout(() => {
-            //     console.log("--- GLOBAL TEST: Closing connection after 60 seconds.");
-            //     testEventSource.close();
-            // }, 60000);
-        });
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
