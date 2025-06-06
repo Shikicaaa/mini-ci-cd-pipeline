@@ -23,7 +23,11 @@ async def get_redis_connection():
         await client.close()
 
 
-@router.get("/user/{user_id}")
+@router.get(
+    "/user/{user_id}",
+    response_class=EventSourceResponse,
+    media_type="text/event-stream"
+)
 async def pipeline_events_sse(
     request: Request,
     user_id: str,
