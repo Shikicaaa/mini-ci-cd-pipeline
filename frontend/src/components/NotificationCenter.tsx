@@ -25,6 +25,7 @@ export default function NotificationCenter() {
 
         eventSource.onmessage = (event) => {
             try {
+                console.log("Received SSE:", event.data);
                 const data = JSON.parse(event.data);
                 addNotification(data);
             } catch (err) {
