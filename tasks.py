@@ -111,7 +111,7 @@ def send_redis_message(
     try:
         redis_client.publish(
             channel,
-            json.dumps(message, ensure_ascii=False)
+            json.dumps(message, ensure_ascii=False).encode('utf-8')
         )
         print(f"Message sent to Redis channel '{channel}': {message}")
         return True

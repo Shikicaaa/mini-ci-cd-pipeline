@@ -55,7 +55,7 @@ async def pipeline_events_sse(
                 }
                 yield {
                     "event": "user_notification",
-                    "data": json.dumps(initial_message)
+                    "data": json.dumps(initial_message, ensure_ascii=False)
                 }
                 print(f"Sent status for pipeline {latest_pipeline.id} to user {user_id}")
 
@@ -63,7 +63,10 @@ async def pipeline_events_sse(
             print(f"Error sending initial status: {e}")
             yield {
                 "event": "error",
-                "data": json.dumps({"error": f"Failed to retrieve initial status: {e}"})
+                "data": json.dumps(
+                    {"error": f"Failed to retrieve initial status: {e}"},
+                    ensure_ascii=False
+                )
             }
         finally:
             db_session.close()
@@ -82,10 +85,10 @@ async def pipeline_events_sse(
                     if isinstance(message_data_str, bytes):
                         message_data_str = message_data_str.decode('utf-8')
 
-                    event_data = json.loads(message_data_str)
+                    event_data = json.loads(message_data_str, ensure_ascii=False)
                     yield {
                         "event": "user_notification",
-                        "data": json.dumps(event_data)
+                        "data": json.dumps(event_data, ensure_ascii=False)
                     }
                 await asyncio.sleep(0.1)
         except asyncio.CancelledError:
