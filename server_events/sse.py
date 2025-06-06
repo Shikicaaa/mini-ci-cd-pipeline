@@ -43,7 +43,7 @@ async def pipeline_events_sse(
             latest_pipeline = db_session.query(PipelineRuns)\
                                   .join(RepoConfig)\
                                   .filter(RepoConfig.users.any(User.id == user_id))\
-                                  .order_by(PipelineRuns.created_at.desc())\
+                                  .order_by(PipelineRuns.end_time.desc())\
                                   .first()
 
             if latest_pipeline:
