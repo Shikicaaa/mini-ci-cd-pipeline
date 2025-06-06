@@ -21,8 +21,8 @@ export default function NotificationCenter() {
         setNotifications((prev) => [...prev, newNotification]);
     }, []);
 
+    const { user_id } = useAuth();
     useEffect(() => {
-        const { user_id } = useAuth();
         if (!user_id) {
             console.warn("User ID is not available, skipping SSE connection.");
             return;
