@@ -85,7 +85,7 @@ async def pipeline_events_sse(
                     if isinstance(message_data_str, bytes):
                         message_data_str = message_data_str.decode('utf-8')
 
-                    event_data = json.loads(message_data_str, ensure_ascii=False)
+                    event_data = json.loads(message_data_str)
                     yield {
                         "event": "user_notification",
                         "data": json.dumps(event_data, ensure_ascii=False)
