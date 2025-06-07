@@ -22,7 +22,7 @@ export default function Notification({ id, message, isLeaving, onClose }: Notifi
         if (!isLeaving) {
             const timer = setTimeout(() => {
                 onClose(id);
-            }, 2000);
+            }, 8000);
             return () => clearTimeout(timer);
         }
     }, [id, isLeaving, onClose]);

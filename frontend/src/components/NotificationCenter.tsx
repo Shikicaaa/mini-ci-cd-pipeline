@@ -15,27 +15,27 @@ export default function NotificationCenter() {
     const { user_id } = useAuth();
 
     const addNotification = useCallback((data: Omit<UIMessage, 'id' | 'isLeaving'>) => {
-        console.log("--> addNotification: Called with data:", data);
+        // console.log("--> addNotification: Called with data:", data);
         const newNotification: UIMessage = {
             ...data,
             id: crypto.randomUUID(),
         };
         setNotifications((prev) => {
-            console.log("--> addNotification: Current notifications BEFORE update:", prev);
+            // console.log("--> addNotification: Current notifications BEFORE update:", prev);
             const updatedNotifications = [...prev, newNotification];
-            console.log("--> addNotification: Notifications AFTER update:", updatedNotifications);
+            // console.log("--> addNotification: Notifications AFTER update:", updatedNotifications);
             return updatedNotifications;
         });
     }, []);
 
     useEffect(() => {
         if (!user_id) {
-            console.warn("--- useEffect: User ID is not available, skipping WebSocket connection.");
+            // console.warn("--- useEffect: User ID is not available, skipping WebSocket connection.");
             return;
         }
 
         const wsUrl = `${import.meta.env.VITE_WS_URL}/notifications/${user_id}`.replace("http", "ws");
-        console.info("--- useEffect: Connecting to WebSocket for user:", user_id, "at URL:", wsUrl);
+        // console.info("--- useEffect: Connecting to WebSocket for user:", user_id, "at URL:", wsUrl);
 
         const websocket = new WebSocket(wsUrl);
 
@@ -44,12 +44,12 @@ export default function NotificationCenter() {
         };
 
         websocket.onmessage = (event) => {
-            console.log("--- WebSocket Event: onmessage TRIGGERED!");
+            // console.log("--- WebSocket Event: onmessage TRIGGERED!");
             try {
-                console.log("--- WebSocket Event: Received RAW event object:", event);
-                console.log("--- WebSocket Event: Received RAW data (event.data):", event.data);
+                // console.log("--- WebSocket Event: Received RAW event object:", event);
+                // console.log("--- WebSocket Event: Received RAW data (event.data):", event.data);
                 const data = JSON.parse(event.data);
-                console.log("--- WebSocket Event: Parsed data (object):", data);
+                // console.log("--- WebSocket Event: Parsed data (object):", data);
                 addNotification(data);
             } catch (err) {
                 console.error("--- WebSocket Event: ERROR parsing WebSocket message:", err, "Raw data:", event.data);
@@ -62,17 +62,17 @@ export default function NotificationCenter() {
         };
 
         websocket.onclose = (event) => {
-            console.log("--- WebSocket Event: Connection closed!", event);
+             console.log("--- WebSocket Event: Connection closed!", event);
         };
 
         return () => {
-            console.log("--- useEffect: Cleaning up - Closing WebSocket connection for user:", user_id);
+            // console.log("--- useEffect: Cleaning up - Closing WebSocket connection for user:", user_id);
             websocket.close();
         };
     }, [user_id, addNotification]);
 
     const removeNotificationCallback = useCallback((idToRemove: string) => {
-        console.log("--- removeNotification: Attempting to remove ID:", idToRemove);
+        // console.log("--- removeNotification: Attempting to remove ID:", idToRemove);
         setNotifications((prev) =>
             prev.map((n) =>
                 n.id === idToRemove ? { ...n, isLeaving: true } : n

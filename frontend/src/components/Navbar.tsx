@@ -3,8 +3,8 @@ import { useAuth } from "../auth/AuthContext";
 
 const Navbar = () => {
   const { username, logout } = useAuth();
-  console.log(username);
-  console.log(username ? username : "No user logged in");
+  // console.log(username);
+  // console.log(username ? username : "No user logged in");
   return (
     <nav className="bg-[#1E3A8A] p-4 flex justify-between items-center">
       <div className="text-white text-lg font-bold">

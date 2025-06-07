@@ -7,6 +7,8 @@ import DockerSettingsForm from "../components/dashboard/DockerSettingsForm";
 import ConfigsList from "../components/dashboard/ConfigList";
 import PipelinesList from "../components/dashboard/PipelineList";
 import EditConfigModal from "../components/dashboard/EditConfigModal";
+import { useAuth } from "../auth/AuthContext";
+import { Navigate } from "react-router-dom";
 // import WebhooksList from "../components/dashboard/WebhooksList";
 
 type TabName = "repository" | "docker" | "configs" | /*"webhooks" |*/ "pipelines";
@@ -31,6 +33,10 @@ const Dashboard = () => {
     handleCloseEditModal();
   };
 
+  const { user_id, username } = useAuth();
+  if (!user_id || !username) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
