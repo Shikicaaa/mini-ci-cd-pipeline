@@ -37,7 +37,7 @@ export const WebSocketProvider: React.FC<React.PropsWithChildren> = ({ children 
         };
 
         return () => socket.close();
-    }, []);
+    }, [user_id]);
 
     const value = { messages, isConnected };
 
